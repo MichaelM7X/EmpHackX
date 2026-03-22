@@ -190,4 +190,91 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
       "What should stay in the model if we want an underwriting-time score?",
     ],
   },
+  {
+    case_id: "ecommerce-return",
+    domain: "E-commerce",
+    title: "⚠️ Bad Case: Customer return prediction",
+    story:
+      "An e-commerce team built a model to predict whether a customer will return a product within 7 days of purchase. The model scored 97% AUC in offline testing and completely collapsed in production. LeakGuard reveals why: the preprocessing code leaks the answer through three separate channels simultaneously.",
+    narrator_line:
+      "This is the deliberately broken showcase case — all three leakage types fire at once. Perfect for demonstrating why 97% offline AUC should raise suspicion, not confidence.",
+    default_inputs: {
+      prediction_goal:
+        "Predict whether a customer will return a purchased product within 7 days of the order date.",
+      target_column: "returned_within_7_days",
+      csv_columns: [
+        "order_id",
+        "customer_id",
+        "order_date",
+        "return_requested_date",
+        "product_category",
+        "cart_value",
+        "discount_pct",
+        "days_since_last_purchase",
+        "support_ticket_opened_within_3d",
+        "refund_amount_received",
+        "avg_customer_return_rate_all_orders",
+        "return_reason_code",
+        "returned_within_7_days",
+      ],
+      preprocessing_code: `import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+
+df = pd.read_csv("orders.csv")
+
+# [BUG 1 - TIME LEAKAGE] Compute each customer's return rate using ALL their orders,
+# including orders placed after this one.
+df["avg_customer_return_rate_all_orders"] = (
+    df.groupby("customer_id")["returned_within_7_days"].transform("mean")
+)
+
+# [BUG 2 - PROXY LEAKAGE] refund_amount_received is only non-zero when a return
+# was processed — it directly encodes the outcome.
+# return_reason_code is filled in by the warehouse only after a return is confirmed.
+feature_cols = [
+    "cart_value", "discount_pct", "days_since_last_purchase",
+    "support_ticket_opened_within_3d",
+    "refund_amount_received",           # post-return signal
+    "avg_customer_return_rate_all_orders",
+    "return_reason_code",               # filled after return confirmed
+]
+
+le = LabelEncoder()
+df["return_reason_code"] = le.fit_transform(df["return_reason_code"].fillna("none"))
+
+# [BUG 3 - STRUCTURE LEAKAGE] Fit scaler on ALL data before splitting.
+# Same customer can appear in both train and test.
+scaler = StandardScaler()
+df[["cart_value", "discount_pct", "days_since_last_purchase"]] = scaler.fit_transform(
+    df[["cart_value", "discount_pct", "days_since_last_purchase"]]
+)
+
+X = df[feature_cols]
+y = df["returned_within_7_days"]
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)`,
+      model_training_code: `from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.metrics import roc_auc_score
+
+model = GradientBoostingClassifier(n_estimators=200, max_depth=5, random_state=42)
+model.fit(X_train, y_train)
+
+y_pred_proba = model.predict_proba(X_test)[:, 1]
+auc = roc_auc_score(y_test, y_pred_proba)
+print(f"AUC: {auc:.4f}")  # prints ~0.97 — suspiciously high`,
+    },
+    expected_findings: [
+      "refund_amount_received directly encodes the return outcome — pure label leakage.",
+      "return_reason_code is filled post-return and is unavailable at prediction time.",
+      "avg_customer_return_rate_all_orders uses future orders to compute a per-customer rate.",
+      "StandardScaler is fit on the full dataset before the train/test split.",
+      "Same customer_id can appear in both train and test sets.",
+    ],
+    prompt_starters: [
+      "Why did this model get 97% AUC but fail in production?",
+      "Which single feature is the worst offender?",
+      "What features are actually safe to keep?",
+    ],
+  },
 ];
