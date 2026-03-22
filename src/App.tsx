@@ -3,7 +3,6 @@ import { demoCases, DemoCase } from "./data/demoCases";
 import { auditWithLLM, chatWithLLM } from "./lib/llmEngine";
 import {
   AgentMessage,
-  AuditFinding,
   AuditReport,
   AuditRequest,
 } from "./types";
@@ -44,14 +43,6 @@ function riskLabelClass(risk: string) {
   return `risk-pill risk-${risk}`;
 }
 
-function findingClassName(
-  finding: AuditFinding,
-  selectedFindingId: string | null,
-) {
-  const isSelected = selectedFindingId === finding.id;
-  return `finding-card ${isSelected ? "is-selected" : ""}`;
-}
-
 export default function App() {
   const [activeCaseId, setActiveCaseId] = useState(demoCases[0].case_id);
   const activeCase = demoCases.find((c) => c.case_id === activeCaseId) ?? demoCases[0];
@@ -60,7 +51,6 @@ export default function App() {
     cloneRequest(demoCases[0].default_inputs),
   );
   const [report, setReport] = useState<AuditReport | null>(null);
-  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<AgentMessage[]>([
     {
       role: "assistant",
@@ -80,7 +70,6 @@ export default function App() {
     const nextRequest = cloneRequest(caseItem.default_inputs);
     setRequest(nextRequest);
     setReport(null);
-    setSelectedFindingId(null);
     setChatMessages([
       {
         role: "assistant",
@@ -133,7 +122,6 @@ export default function App() {
     try {
       const nextReport = await auditWithLLM(request);
       setReport(nextReport);
-      setSelectedFindingId(nextReport.findings[0]?.id ?? null);
       setChatMessages((msgs) => [
         ...msgs,
         {
@@ -165,11 +153,6 @@ export default function App() {
       );
     }
   };
-
-  const selectedFinding =
-    report?.findings.find((f) => f.id === selectedFindingId) ??
-    report?.findings[0] ??
-    null;
 
   const handleChatSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -400,20 +383,6 @@ export default function App() {
                 />
               </label>
 
-              <label className="field">
-                <span>Target column</span>
-                <input
-                  type="text"
-                  value={request.target_column}
-                  onChange={(e) =>
-                    setRequest((c) => ({
-                      ...c,
-                      target_column: e.target.value,
-                    }))
-                  }
-                />
-              </label>
-
               <div className="field">
                 <span>CSV file (header extraction)</span>
                 <div className="csv-upload-area">
@@ -586,83 +555,73 @@ export default function App() {
 
                   <div className="findings-list">
                     {report.findings.map((finding) => (
-                      <button
+                      <article
                         key={finding.id}
-                        className={findingClassName(finding, selectedFindingId)}
-                        type="button"
-                        onClick={() => setSelectedFindingId(finding.id)}
+                        className={`finding-expanded finding-sev-${finding.severity}`}
                       >
                         <div className="finding-head">
-                          <strong>{finding.flagged_object}</strong>
+                          <div className="finding-head-left">
+                            <strong className="finding-object">
+                              {finding.flagged_object}
+                            </strong>
+                            <p className="finding-title">{finding.title}</p>
+                          </div>
                           <div className="finding-badges">
                             {finding.id.startsWith("review-") && (
                               <span className="review-agent-badge">
                                 Review Agent
                               </span>
                             )}
-                            <span
-                              className={riskLabelClass(finding.severity)}
-                            >
-                              {finding.severity}
+                            <span className={riskLabelClass(finding.severity)}>
+                              {finding.severity.toUpperCase()}
                             </span>
                           </div>
                         </div>
-                        <p>{finding.title}</p>
-                        <div className="finding-meta">
-                          <span>{finding.macro_bucket}</span>
-                          <span>{finding.fine_grained_type}</span>
-                          <span>{finding.confidence} confidence</span>
+
+                        <div className="finding-type-row">
+                          <span className="macro-chip">
+                            {finding.macro_bucket}
+                          </span>
+                          <span className="fine-chip">
+                            {finding.fine_grained_type.replace(/_/g, " ")}
+                          </span>
+                          <span className="confidence-chip">
+                            {finding.confidence} confidence
+                          </span>
                         </div>
-                      </button>
+
+                        <div className="finding-body">
+                          <div className="finding-section">
+                            <h5>Evidence</h5>
+                            <ul>
+                              {finding.evidence.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="finding-section">
+                            <h5>Fix recommendation</h5>
+                            <ul>
+                              {finding.fix_recommendation.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+
+                        <div className="finding-footer">
+                          <p className="why-it-matters">
+                            {finding.why_it_matters}
+                          </p>
+                          {finding.needs_human_review && (
+                            <span className="human-review-chip">
+                              Needs human review
+                            </span>
+                          )}
+                        </div>
+                      </article>
                     ))}
                   </div>
-
-                  {selectedFinding ? (
-                    <article className="detail-card">
-                      <div className="panel-header compact">
-                        <div>
-                          <p className="eyebrow">Detail view</p>
-                          <h4>{selectedFinding.flagged_object}</h4>
-                        </div>
-                        <span
-                          className={riskLabelClass(selectedFinding.severity)}
-                        >
-                          {selectedFinding.macro_bucket}
-                        </span>
-                      </div>
-                      <p className="detail-subtitle">
-                        {selectedFinding.title}
-                      </p>
-                      <div className="detail-columns">
-                        <div>
-                          <h5>Evidence</h5>
-                          <ul>
-                            {selectedFinding.evidence.map((item) => (
-                              <li key={item}>{item}</li>
-                            ))}
-                          </ul>
-                        </div>
-                        <div>
-                          <h5>Recommendation</h5>
-                          <ul>
-                            {selectedFinding.fix_recommendation.map(
-                              (item) => (
-                                <li key={item}>{item}</li>
-                              ),
-                            )}
-                          </ul>
-                        </div>
-                      </div>
-                      <div className="detail-footer">
-                        <p>{selectedFinding.why_it_matters}</p>
-                        {selectedFinding.needs_human_review ? (
-                          <span className="human-review-chip">
-                            Needs human review
-                          </span>
-                        ) : null}
-                      </div>
-                    </article>
-                  ) : null}
 
                   {report.missing_metadata.length > 0 ? (
                     <article className="metadata-card">

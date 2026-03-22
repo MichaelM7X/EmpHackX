@@ -24,7 +24,7 @@ export interface FeatureDictionaryEntry {
 
 export interface AuditRequest {
   prediction_goal: string;
-  target_column: string;
+  target_column?: string;
   csv_columns: string[];
   preprocessing_code: string;
   model_training_code?: string;

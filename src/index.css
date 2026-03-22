@@ -1027,3 +1027,124 @@ button {
   border-color: rgba(210, 92, 40, 0.3);
   color: var(--accent);
 }
+
+/* ===== Expanded Finding Cards ===== */
+.finding-expanded {
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+  background: var(--surface, #fff);
+  border-left: 4px solid var(--border, #e2e8f0);
+}
+
+.finding-sev-critical { border-left-color: #b83b2d; }
+.finding-sev-high     { border-left-color: #d25c28; }
+.finding-sev-medium   { border-left-color: #c88d1b; }
+.finding-sev-low      { border-left-color: #4d8f73; }
+
+.finding-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.finding-head-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.finding-object {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text, #1a202c);
+}
+
+.finding-title {
+  font-size: 0.82rem;
+  color: var(--text-muted, #718096);
+  margin: 0;
+}
+
+.finding-type-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+
+.macro-chip {
+  font-size: 0.72rem;
+  background: #eef2ff;
+  color: #3730a3;
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-weight: 600;
+}
+
+.fine-chip {
+  font-size: 0.72rem;
+  background: #f0fdf4;
+  color: #166534;
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+}
+
+.confidence-chip {
+  font-size: 0.72rem;
+  background: #f8fafc;
+  color: #64748b;
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+}
+
+.finding-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .finding-body { grid-template-columns: 1fr; }
+}
+
+.finding-section h5 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #718096);
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+}
+
+.finding-section ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.finding-section li {
+  font-size: 0.82rem;
+  color: var(--text, #1a202c);
+  line-height: 1.5;
+  margin-bottom: 0.2rem;
+}
+
+.finding-footer {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border, #e2e8f0);
+}
+
+.why-it-matters {
+  font-size: 0.82rem;
+  color: var(--text-muted, #718096);
+  font-style: italic;
+  margin: 0;
+  flex: 1;
+}
