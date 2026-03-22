@@ -95,10 +95,10 @@ Start both frontend and backend:
 npm run dev:full
 ```
 
-Then open http://localhost:5173.
+Then open the frontend URL printed in the terminal — by default **`http://localhost:5173`** (set in `vite.config.ts`). If that port is already in use, Vite may pick the next free port; use whatever URL the dev server logs.
 
 Or run them separately:
-- `npm run dev` — frontend (Vite, port 5173)
+- `npm run dev` — frontend (Vite; default port **5173** in this repo)
 - `npm run server` — backend (Express, port 3001)
 
 ---
