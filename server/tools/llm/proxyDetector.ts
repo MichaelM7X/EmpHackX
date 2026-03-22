@@ -4,26 +4,32 @@ import { callOpenAIJson } from "../../openaiClient";
 export async function detectProxyLeakage(
   request: AuditRequest,
 ): Promise<AuditFinding[]> {
-  const featureList = request.feature_dictionary
-    .map((f) => `- ${f.name}: ${f.description}`)
-    .join("\n");
+  const featureColumns = request.csv_columns.filter(
+    (c) => c !== request.target_column,
+  );
+  const featureList = featureColumns.map((f) => `- ${f}`).join("\n");
 
   const systemPrompt = `You are an expert ML auditor specializing in data leakage detection.
-Analyze each feature and determine if it is a target proxy — meaning it is causally 
+Analyze each feature column and determine if it is a target proxy — meaning it is causally 
 downstream of the label, or is essentially a restatement of the label.
+
+Based on the prediction task description, infer when the prediction happens, then analyze
+whether each feature would realistically be available at that time.
 
 You must respond with ONLY valid JSON.`;
 
   const userPrompt = `Prediction task: ${request.prediction_goal}
 Target column: ${request.target_column}
-Prediction time point: ${request.prediction_time_point}
 
-Features to analyze:
+Feature columns to analyze:
 ${featureList}
+
+Preprocessing code context:
+${request.preprocessing_code}
 
 For each feature, determine:
 1. Is this feature causally upstream (a legitimate predictor) or downstream (a result/proxy) of the target?
-2. At the prediction time point, would this feature realistically be available?
+2. Based on the prediction task, would this feature realistically be available at prediction time?
 
 Respond in this exact JSON format:
 {

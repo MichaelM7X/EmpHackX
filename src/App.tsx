@@ -11,20 +11,19 @@ import {
 const traceSteps = [
   {
     title: "Parse intake context",
-    detail: "Normalize the task, target, entity keys, and timing fields.",
+    detail: "Extract CSV columns, preprocessing code, and prediction goal.",
   },
   {
     title: "Check time leakage",
-    detail: "LLM inspects feature availability and derived aggregate windows.",
+    detail: "LLM infers prediction timing from task description, then checks features.",
   },
   {
     title: "Check feature proxies",
     detail: "LLM flags label-adjacent fields and downstream workflow signals.",
   },
   {
-    title: "Check structure leakage",
-    detail:
-      "Rules + code audit review split design, repeated entities, and global preprocessing.",
+    title: "Audit preprocessing code",
+    detail: "LLM analyzes code for split design, global preprocessing, and aggregation leaks.",
   },
   {
     title: "Review Agent",
@@ -33,23 +32,12 @@ const traceSteps = [
   },
   {
     title: "Generate narrative report",
-    detail: "LLM writes evidence-backed findings, fixes, and follow-up questions.",
+    detail: "LLM writes evidence-backed findings and follow-up questions.",
   },
 ];
 
 function cloneRequest(request: AuditRequest): AuditRequest {
   return JSON.parse(JSON.stringify(request)) as AuditRequest;
-}
-
-function joinValues(values: string[]) {
-  return values.join(", ");
-}
-
-function splitValues(value: string) {
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 function riskLabelClass(risk: string) {
@@ -83,9 +71,8 @@ export default function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [traceIndex, setTraceIndex] = useState(-1);
   const [lastRunLabel, setLastRunLabel] = useState("Ready");
-  const [copyStatus, setCopyStatus] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const [pipelineTab, setPipelineTab] = useState<"notes" | "code">("notes");
+  const [csvFileName, setCsvFileName] = useState("");
   const traceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const switchCase = (caseItem: DemoCase) => {
@@ -103,18 +90,34 @@ export default function App() {
     setIsRunning(false);
     setTraceIndex(-1);
     setLastRunLabel("Loaded demo defaults");
-    setCopyStatus("");
-    setPipelineTab("notes");
+    setCsvFileName(`${caseItem.case_id}-demo.csv`);
   };
 
   const resetToDefaults = () => {
     switchCase(activeCase);
   };
 
+  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCsvFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const firstLine = text.split("\n")[0];
+      const columns = firstLine
+        .split(",")
+        .map((col) => col.trim().replace(/^["']|["']$/g, ""))
+        .filter(Boolean);
+      setRequest((c) => ({ ...c, csv_columns: columns }));
+    };
+    reader.readAsText(file);
+  };
+
   const runAudit = async () => {
     setIsRunning(true);
     setTraceIndex(0);
-    setCopyStatus("");
 
     let step = 0;
     traceTimerRef.current = setInterval(() => {
@@ -223,33 +226,6 @@ export default function App() {
       .finally(() => {
         setIsChatLoading(false);
       });
-  };
-
-  const downloadReport = () => {
-    if (!report) return;
-    const fileName = `${activeCaseId}-audit-report.json`;
-    const blob = new Blob([JSON.stringify({ request, report }, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const copyFixPlan = async () => {
-    if (!report) return;
-    const content = report.fix_plan
-      .map((item, index) => `${index + 1}. ${item}`)
-      .join("\n");
-    if (!navigator.clipboard) {
-      setCopyStatus("Clipboard not available in this browser.");
-      return;
-    }
-    await navigator.clipboard.writeText(content);
-    setCopyStatus("Fix plan copied.");
   };
 
   return (
@@ -424,206 +400,85 @@ export default function App() {
                 />
               </label>
 
-              <div className="two-column">
-                <label className="field">
-                  <span>Target column</span>
-                  <input
-                    type="text"
-                    value={request.target_column}
-                    onChange={(e) =>
-                      setRequest((c) => ({
-                        ...c,
-                        target_column: e.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>Prediction time point</span>
-                  <input
-                    type="text"
-                    value={request.prediction_time_point}
-                    onChange={(e) =>
-                      setRequest((c) => ({
-                        ...c,
-                        prediction_time_point: e.target.value,
-                      }))
-                    }
-                    placeholder="e.g. The moment a listing goes live"
-                  />
-                </label>
-              </div>
+              <label className="field">
+                <span>Target column</span>
+                <input
+                  type="text"
+                  value={request.target_column}
+                  onChange={(e) =>
+                    setRequest((c) => ({
+                      ...c,
+                      target_column: e.target.value,
+                    }))
+                  }
+                />
+              </label>
 
-              <div className="two-column">
-                <label className="field">
-                  <span>Timestamp fields</span>
+              <div className="field">
+                <span>CSV file (header extraction)</span>
+                <div className="csv-upload-area">
                   <input
-                    type="text"
-                    value={joinValues(request.timestamp_fields)}
-                    onChange={(e) =>
-                      setRequest((c) => ({
-                        ...c,
-                        timestamp_fields: splitValues(e.target.value),
-                      }))
-                    }
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCsvUpload}
+                    id="csv-upload"
+                    className="csv-file-input"
                   />
-                </label>
-                <label className="field">
-                  <span>Entity keys</span>
-                  <input
-                    type="text"
-                    value={joinValues(request.entity_keys)}
-                    onChange={(e) =>
-                      setRequest((c) => ({
-                        ...c,
-                        entity_keys: splitValues(e.target.value),
-                      }))
-                    }
-                  />
-                </label>
-              </div>
-
-              <div className="tab-switcher">
-                <button
-                  className={`tab-button ${pipelineTab === "notes" ? "tab-active" : ""}`}
-                  type="button"
-                  onClick={() => setPipelineTab("notes")}
-                >
-                  Pipeline Notes
-                </button>
-                <button
-                  className={`tab-button ${pipelineTab === "code" ? "tab-active" : ""}`}
-                  type="button"
-                  onClick={() => setPipelineTab("code")}
-                >
-                  Preprocessing Code
-                </button>
-              </div>
-
-              {pipelineTab === "notes" ? (
-                <label className="field">
-                  <span>Pipeline notes</span>
-                  <textarea
-                    rows={5}
-                    value={request.pipeline_notes}
-                    onChange={(e) =>
-                      setRequest((c) => ({
-                        ...c,
-                        pipeline_notes: e.target.value,
-                      }))
-                    }
-                    placeholder="Describe how the data is split, preprocessed, and fed to the model."
-                  />
-                </label>
-              ) : (
-                <label className="field">
-                  <span>Preprocessing code (Python)</span>
-                  <textarea
-                    rows={8}
-                    value={request.preprocessing_code ?? ""}
-                    onChange={(e) =>
-                      setRequest((c) => ({
-                        ...c,
-                        preprocessing_code: e.target.value || undefined,
-                      }))
-                    }
-                    placeholder="Paste your preprocessing / pipeline code here for code-level audit."
-                    style={{ fontFamily: "monospace", fontSize: "0.85rem" }}
-                  />
-                </label>
-              )}
-
-              <div className="feature-catalog">
-                <div className="panel-header compact">
-                  <div>
-                    <p className="eyebrow">Feature Catalog</p>
-                    <h4>
-                      {request.feature_dictionary.length} tracked fields
-                    </h4>
+                  <label htmlFor="csv-upload" className="csv-upload-label">
+                    {csvFileName || "Choose CSV file..."}
+                  </label>
+                </div>
+                {request.csv_columns.length > 0 && (
+                  <div className="csv-columns-preview">
+                    <span className="csv-columns-count">
+                      {request.csv_columns.length} columns detected
+                    </span>
+                    <div className="csv-columns-list">
+                      {request.csv_columns.map((col) => (
+                        <span
+                          className={`csv-col-chip ${col === request.target_column ? "csv-col-target" : ""}`}
+                          key={col}
+                        >
+                          {col}
+                          {col === request.target_column ? " (target)" : ""}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="feature-list">
-                  {request.feature_dictionary.map((feature, idx) => (
-                    <article className="feature-row" key={feature.name}>
-                      <div style={{ flex: 1 }}>
-                        <input
-                          type="text"
-                          value={feature.name}
-                          onChange={(e) => {
-                            const updated = [...request.feature_dictionary];
-                            updated[idx] = { ...updated[idx], name: e.target.value };
-                            setRequest((c) => ({
-                              ...c,
-                              feature_dictionary: updated,
-                            }));
-                          }}
-                          style={{
-                            fontWeight: 700,
-                            border: "none",
-                            background: "transparent",
-                            padding: "2px 0",
-                            width: "100%",
-                          }}
-                        />
-                        <textarea
-                          rows={2}
-                          value={feature.description}
-                          onChange={(e) => {
-                            const updated = [...request.feature_dictionary];
-                            updated[idx] = {
-                              ...updated[idx],
-                              description: e.target.value,
-                            };
-                            setRequest((c) => ({
-                              ...c,
-                              feature_dictionary: updated,
-                            }));
-                          }}
-                          style={{
-                            border: "none",
-                            background: "transparent",
-                            padding: "2px 0",
-                            width: "100%",
-                            resize: "vertical",
-                            color: "var(--muted)",
-                            fontSize: "0.9rem",
-                          }}
-                        />
-                      </div>
-                      <button
-                        className="tiny-button"
-                        type="button"
-                        onClick={() => {
-                          setRequest((c) => ({
-                            ...c,
-                            feature_dictionary:
-                              c.feature_dictionary.filter((_, i) => i !== idx),
-                          }));
-                        }}
-                        style={{ alignSelf: "flex-start", padding: "6px 10px" }}
-                      >
-                        Remove
-                      </button>
-                    </article>
-                  ))}
-                  <button
-                    className="tiny-button"
-                    type="button"
-                    onClick={() => {
-                      setRequest((c) => ({
-                        ...c,
-                        feature_dictionary: [
-                          ...c.feature_dictionary,
-                          { name: "", description: "" },
-                        ],
-                      }));
-                    }}
-                    style={{ alignSelf: "flex-start" }}
-                  >
-                    + Add Feature
-                  </button>
-                </div>
+                )}
               </div>
+
+              <label className="field">
+                <span>Preprocessing code (required)</span>
+                <textarea
+                  rows={10}
+                  value={request.preprocessing_code}
+                  onChange={(e) =>
+                    setRequest((c) => ({
+                      ...c,
+                      preprocessing_code: e.target.value,
+                    }))
+                  }
+                  placeholder="Paste your preprocessing / pipeline code here."
+                  style={{ fontFamily: "monospace", fontSize: "0.85rem" }}
+                />
+              </label>
+
+              <label className="field">
+                <span>Model training code (optional)</span>
+                <textarea
+                  rows={6}
+                  value={request.model_training_code ?? ""}
+                  onChange={(e) =>
+                    setRequest((c) => ({
+                      ...c,
+                      model_training_code: e.target.value || undefined,
+                    }))
+                  }
+                  placeholder="Paste your model training code here for deeper analysis."
+                  style={{ fontFamily: "monospace", fontSize: "0.85rem" }}
+                />
+              </label>
             </section>
 
             {/* ===== Trace Panel ===== */}
@@ -686,24 +541,6 @@ export default function App() {
                   <p className="eyebrow">Findings</p>
                   <h3>Evidence-backed report</h3>
                 </div>
-                {report && (
-                  <div className="results-actions">
-                    <button
-                      className="tiny-button"
-                      type="button"
-                      onClick={downloadReport}
-                    >
-                      Export JSON
-                    </button>
-                    <button
-                      className="tiny-button"
-                      type="button"
-                      onClick={() => void copyFixPlan()}
-                    >
-                      Copy fix plan
-                    </button>
-                  </div>
-                )}
               </div>
 
               {!report ? (
@@ -736,9 +573,6 @@ export default function App() {
                         ),
                       )}
                     </div>
-                    {copyStatus ? (
-                      <p className="copy-status">{copyStatus}</p>
-                    ) : null}
                   </article>
 
                   {report.narrative_report && (
@@ -747,19 +581,6 @@ export default function App() {
                       <p className="narrative-text">
                         {report.narrative_report}
                       </p>
-                    </article>
-                  )}
-
-                  {report.safe_features && report.safe_features.length > 0 && (
-                    <article className="safe-features-card">
-                      <p className="eyebrow">Safe Features</p>
-                      <div className="safe-features-list">
-                        {report.safe_features.map((name) => (
-                          <span className="safe-chip" key={name}>
-                            {name}
-                          </span>
-                        ))}
-                      </div>
                     </article>
                   )}
 

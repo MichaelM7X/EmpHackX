@@ -19,13 +19,10 @@ You completed an audit of the following ML pipeline:
 
 Prediction Goal: ${request.prediction_goal}
 Target: ${request.target_column}
-Prediction Time Point: ${request.prediction_time_point}
 Overall Risk: ${report.overall_risk.toUpperCase()}
 
 Findings (${report.findings.length} total):
 ${findingsSummary}
-
-Safe Features: ${report.safe_features?.join(", ") ?? "none"}
 
 Answer questions about this audit concisely and precisely. Reference specific 
 findings by name when relevant. Focus on actionable guidance. Keep responses 

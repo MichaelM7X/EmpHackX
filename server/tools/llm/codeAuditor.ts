@@ -3,22 +3,29 @@ import { callOpenAIJson } from "../../openaiClient";
 
 export interface CodeAuditResult {
   split_method: string | null;
+  detected_entity_keys: string[];
   findings: AuditFinding[];
 }
 
 export async function auditPreprocessingCode(
   request: AuditRequest,
 ): Promise<CodeAuditResult> {
-  if (!request.preprocessing_code) {
-    return { split_method: null, findings: [] };
-  }
+  const columnList = request.csv_columns.join(", ");
 
   const systemPrompt = `You are an expert ML code auditor. Analyze preprocessing code 
 to detect data leakage issues.
 
+Based on the CSV column names and preprocessing code, also identify:
+- The train/test split method used
+- Which columns are likely entity/group ID columns (e.g. user_id, patient_id, loan_id)
+
 You must respond with ONLY valid JSON.`;
 
-  const userPrompt = `Here is the preprocessing code:
+  const userPrompt = `Prediction task: ${request.prediction_goal}
+Target column: ${request.target_column}
+CSV columns: ${columnList}
+
+Preprocessing code:
 
 \`\`\`python
 ${request.preprocessing_code}
@@ -26,13 +33,15 @@ ${request.preprocessing_code}
 
 Analyze this code and answer:
 1. What is the train/test split method? (random / time-based / group-based / unknown)
-2. Is any preprocessing (scaling, encoding, imputation) fitted on the full dataset before splitting?
-3. Are there aggregation features computed using data that might include future observations?
-4. Any other data leakage concerns?
+2. Which columns appear to be entity/group ID columns that should be used for grouped splitting?
+3. Is any preprocessing (scaling, encoding, imputation) fitted on the full dataset before splitting?
+4. Are there aggregation features computed using data that might include future observations?
+5. Any other data leakage concerns?
 
 Respond in this exact JSON format:
 {
   "split_method": "random" or "time-based" or "group-based" or "unknown",
+  "detected_entity_keys": ["column_name_1", "column_name_2"],
   "issues": [
     {
       "description": "what the issue is",
@@ -74,6 +83,8 @@ Respond in this exact JSON format:
 
   return {
     split_method: String(result.split_method ?? null),
+    detected_entity_keys:
+      (result.detected_entity_keys as string[]) ?? [],
     findings,
   };
 }

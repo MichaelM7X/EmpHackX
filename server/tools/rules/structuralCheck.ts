@@ -7,7 +7,16 @@ export function structuralCheck(
 ): AuditFinding[] {
   const findings: AuditFinding[] = [];
 
-  if (request.entity_keys.length === 0) return findings;
+  const entityKeys =
+    codeAuditResult?.detected_entity_keys ??
+    request.csv_columns.filter(
+      (col) =>
+        col.toLowerCase().endsWith("_id") ||
+        col.toLowerCase().endsWith("_key") ||
+        col.toLowerCase() === "id",
+    );
+
+  if (entityKeys.length === 0) return findings;
 
   let splitIsRandom = false;
   let confidence: "high" | "medium" = "medium";
@@ -15,11 +24,16 @@ export function structuralCheck(
   if (codeAuditResult?.split_method === "random") {
     splitIsRandom = true;
     confidence = "high";
-  } else if (
-    (request.pipeline_notes ?? "").toLowerCase().includes("random split")
-  ) {
-    splitIsRandom = true;
-    confidence = "medium";
+  } else {
+    const code = (request.preprocessing_code ?? "").toLowerCase();
+    if (
+      code.includes("train_test_split") &&
+      !code.includes("groupkfold") &&
+      !code.includes("timeseriessplit")
+    ) {
+      splitIsRandom = true;
+      confidence = "medium";
+    }
   }
 
   if (splitIsRandom) {
@@ -30,16 +44,16 @@ export function structuralCheck(
       fine_grained_type: "join_entity",
       severity: "high",
       confidence,
-      flagged_object: request.entity_keys.join(", "),
+      flagged_object: entityKeys.join(", "),
       evidence: [
         "Split method identified as random.",
-        `Entity keys: ${request.entity_keys.join(", ")}.`,
+        `Likely entity keys: ${entityKeys.join(", ")}.`,
         "Random split does not respect entity boundaries.",
       ],
       why_it_matters:
         "Model learns entity identity rather than generalizable patterns.",
       fix_recommendation: [
-        `Use GroupKFold with group key = ${request.entity_keys[0]}.`,
+        `Use GroupKFold with group key = ${entityKeys[0]}.`,
       ],
       needs_human_review: false,
     });

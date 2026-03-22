@@ -1,6 +1,5 @@
 import { AuditRequest, AuditReport, AuditFinding } from "../src/types";
 import { pipelineScan } from "./tools/rules/pipelineScan";
-import { metadataCheck } from "./tools/rules/metadataCheck";
 import { structuralCheck } from "./tools/rules/structuralCheck";
 import { detectProxyLeakage } from "./tools/llm/proxyDetector";
 import { detectTemporalLeakage } from "./tools/llm/temporalDetector";
@@ -8,13 +7,10 @@ import {
   auditPreprocessingCode,
   CodeAuditResult,
 } from "./tools/llm/codeAuditor";
+import { auditModelTrainingCode } from "./tools/llm/modelCodeAuditor";
 import { reviewAgent } from "./tools/llm/reviewAgent";
 import { generateNarrativeReport } from "./tools/llm/reportGenerator";
-import {
-  dedupeFindings,
-  computeOverallRisk,
-  computeSafeFeatures,
-} from "./utils";
+import { dedupeFindings, computeOverallRisk } from "./utils";
 
 export async function runAudit(request: AuditRequest): Promise<AuditReport> {
   const findings: AuditFinding[] = [];
@@ -23,9 +19,8 @@ export async function runAudit(request: AuditRequest): Promise<AuditReport> {
   // Phase 1: Fixed orchestration (deterministic)
   // ============================================
 
-  // Step 1: rule-engine tools (synchronous)
+  // Step 1: rule-engine scan of preprocessing code
   findings.push(...pipelineScan(request));
-  findings.push(...metadataCheck(request));
 
   // Step 2: LLM tools (parallel)
   const [proxyFindings, temporalFindings] = await Promise.all([
@@ -35,14 +30,18 @@ export async function runAudit(request: AuditRequest): Promise<AuditReport> {
   findings.push(...proxyFindings);
   findings.push(...temporalFindings);
 
-  // Step 3: optional code audit
+  // Step 3: code audit (always runs — preprocessing_code is required)
   let codeAuditResult: CodeAuditResult | null = null;
-  if (request.preprocessing_code) {
-    codeAuditResult = await auditPreprocessingCode(request);
-    findings.push(...codeAuditResult.findings);
+  codeAuditResult = await auditPreprocessingCode(request);
+  findings.push(...codeAuditResult.findings);
+
+  // Step 4: model training code audit (conditional)
+  if (request.model_training_code) {
+    const modelFindings = await auditModelTrainingCode(request);
+    findings.push(...modelFindings);
   }
 
-  // Step 4: structural check
+  // Step 5: structural check (uses code audit result for entity key detection)
   findings.push(...structuralCheck(request, codeAuditResult));
 
   const phase1Findings = dedupeFindings(findings);
@@ -70,16 +69,11 @@ export async function runAudit(request: AuditRequest): Promise<AuditReport> {
     ...additionalFindings,
   ]);
   const overallRisk = computeOverallRisk(allFindings);
-  const safeFeatures = computeSafeFeatures(
-    request.feature_dictionary,
-    allFindings,
-  );
 
   const narrative = await generateNarrativeReport(
     request,
     allFindings,
     overallRisk,
-    safeFeatures,
   );
 
   const bucketSummary = {
@@ -97,24 +91,15 @@ export async function runAudit(request: AuditRequest): Promise<AuditReport> {
     .filter((f) => f.fine_grained_type === "missing_metadata")
     .map((f) => f.flagged_object);
 
-  const fixPlan = [
-    ...new Set(allFindings.flatMap((f) => f.fix_recommendation)),
-  ].slice(0, 8);
-
   const clarifyingQuestions = [
-    ...new Set([
-      ...missingMetadata.map((field) =>
-        field === "timestamp_fields"
-          ? "Which columns define feature time, prediction cutoff, and outcome time?"
-          : "Which stable entity key should validation group on?",
-      ),
-      ...allFindings
+    ...new Set(
+      allFindings
         .filter((f) => f.needs_human_review)
         .map(
           (f) =>
             `Can a human reviewer confirm when ${f.flagged_object} becomes available relative to the prediction boundary?`,
         ),
-    ]),
+    ),
   ];
 
   return {
@@ -122,10 +107,8 @@ export async function runAudit(request: AuditRequest): Promise<AuditReport> {
     summary: `Audit complete. Overall risk: ${overallRisk.toUpperCase()}. Found ${allFindings.length} issue(s). Review agent ${additionalFindings.length > 0 ? `added ${additionalFindings.length} additional finding(s)` : "confirmed initial assessment"}.`,
     narrative_report: narrative,
     findings: allFindings,
-    safe_features: safeFeatures,
     missing_metadata: [...new Set(missingMetadata)],
-    clarifying_questions,
-    fix_plan: fixPlan,
+    clarifying_questions: clarifyingQuestions,
     bucket_summary: bucketSummary,
   };
 }

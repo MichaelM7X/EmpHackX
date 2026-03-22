@@ -27,40 +27,40 @@ export const demoCases: DemoCase[] = [
       prediction_goal:
         "Predict monthly rent and whether a rental listing will be leased within 7 days.",
       target_column: "leased_within_7_days",
-      prediction_time_point: "The moment a listing goes live on the platform",
-      timestamp_fields: ["listing_date", "lease_signed_date"],
-      entity_keys: ["listing_id", "building_id", "landlord_id"],
-      feature_dictionary: [
-        {
-          name: "bedrooms",
-          description: "Bedroom count visible when the listing goes live.",
-        },
-        {
-          name: "distance_to_subway",
-          description: "Nearest subway stop distance at listing time.",
-        },
-        {
-          name: "days_on_market",
-          description:
-            "Number of days the listing stayed active before it was rented.",
-        },
-        {
-          name: "final_lease_price",
-          description:
-            "Final signed price after negotiation, recorded after the deal closes.",
-        },
-        {
-          name: "neighborhood_avg_rent",
-          description:
-            "Neighborhood average rent computed over the full dataset, including future months.",
-        },
-        {
-          name: "broker_fee_flag",
-          description: "Whether the unit had a broker fee at listing time.",
-        },
+      csv_columns: [
+        "listing_id",
+        "building_id",
+        "landlord_id",
+        "listing_date",
+        "lease_signed_date",
+        "bedrooms",
+        "distance_to_subway",
+        "days_on_market",
+        "final_lease_price",
+        "neighborhood_avg_rent",
+        "broker_fee_flag",
+        "leased_within_7_days",
       ],
-      pipeline_notes:
-        "Random split across listings. Multiple units from the same building and landlord appear in both train and test. Neighborhood average rent was computed with all available months, not just data available at listing time.",
+      preprocessing_code: `import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+df = pd.read_csv("listings.csv")
+
+# Compute neighborhood average rent using ALL data (including future months)
+df["neighborhood_avg_rent"] = df.groupby("neighborhood")["rent"].transform("mean")
+
+# Scale features globally before splitting
+scaler = StandardScaler()
+feature_cols = ["bedrooms", "distance_to_subway", "days_on_market",
+                "final_lease_price", "neighborhood_avg_rent", "broker_fee_flag"]
+df[feature_cols] = scaler.fit_transform(df[feature_cols])
+
+X = df[feature_cols]
+y = df["leased_within_7_days"]
+
+# Random split — ignores building_id and landlord_id
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)`,
     },
     expected_findings: [
       "Future rent aggregates are leaking through neighborhood_avg_rent.",
@@ -91,42 +91,34 @@ export const demoCases: DemoCase[] = [
       prediction_goal:
         "Audit a model that predicts sepsis or clinical deterioration within the next 12 hours.",
       target_column: "deterioration_within_12h",
-      prediction_time_point:
-        "The moment the model scores a patient (every 15 minutes during hospitalization)",
-      timestamp_fields: ["admission_time", "measurement_time", "outcome_time"],
-      entity_keys: ["patient_id", "encounter_id"],
-      feature_dictionary: [
-        {
-          name: "heart_rate_last_6h",
-          description: "Rolling heart-rate summary from the first 6 hours.",
-        },
-        {
-          name: "lactate_initial",
-          description: "Initial lactate value collected early in the stay.",
-        },
-        {
-          name: "rapid_response_team_called",
-          description:
-            "Whether a rapid response team was called after clinicians noticed instability.",
-        },
-        {
-          name: "antibiotic_escalation_after_suspicion",
-          description:
-            "Escalation to broader-spectrum antibiotics after sepsis concern was raised.",
-        },
-        {
-          name: "full_stay_max_lactate",
-          description:
-            "Maximum lactate observed over the full hospitalization, not just before the cutoff.",
-        },
-        {
-          name: "icu_transfer_order",
-          description:
-            "Order placed for ICU transfer after patient decline was recognized.",
-        },
+      csv_columns: [
+        "patient_id",
+        "encounter_id",
+        "admission_time",
+        "measurement_time",
+        "outcome_time",
+        "heart_rate_last_6h",
+        "lactate_initial",
+        "rapid_response_team_called",
+        "antibiotic_escalation_after_suspicion",
+        "full_stay_max_lactate",
+        "icu_transfer_order",
+        "deterioration_within_12h",
       ],
-      pipeline_notes:
-        "Encounter-random split rather than patient-grouped temporal validation. Some operational response variables remain in the feature list. Timestamp granularity is coarse for certain order events.",
+      preprocessing_code: `import pandas as pd
+from sklearn.model_selection import train_test_split
+
+df = pd.read_csv("sepsis_encounters.csv")
+
+feature_cols = ["heart_rate_last_6h", "lactate_initial",
+                "rapid_response_team_called", "antibiotic_escalation_after_suspicion",
+                "full_stay_max_lactate", "icu_transfer_order"]
+
+X = df[feature_cols]
+y = df["deterioration_within_12h"]
+
+# Encounter-random split rather than patient-grouped temporal validation
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)`,
     },
     expected_findings: [
       "Operational response variables look like downstream proxies rather than early-warning signals.",
@@ -151,46 +143,41 @@ export const demoCases: DemoCase[] = [
       prediction_goal:
         "Predict whether a newly originated loan will default within 90 days.",
       target_column: "default_within_90_days",
-      prediction_time_point:
-        "The moment the loan is originated (funded and disbursed)",
-      timestamp_fields: [
+      csv_columns: [
+        "loan_id",
+        "borrower_id",
         "application_date",
         "origination_date",
         "chargeoff_date",
+        "fico_at_application",
+        "debt_to_income",
+        "delinquency_60d_after_origination",
+        "collections_status",
+        "recovery_amount_30d",
+        "portfolio_avg_default_rate_full_quarter",
+        "default_within_90_days",
       ],
-      entity_keys: ["loan_id", "borrower_id"],
-      feature_dictionary: [
-        {
-          name: "fico_at_application",
-          description: "Borrower FICO score available at application time.",
-        },
-        {
-          name: "debt_to_income",
-          description: "Debt-to-income ratio at application time.",
-        },
-        {
-          name: "delinquency_60d_after_origination",
-          description:
-            "Missed-payment behavior observed after the loan has already been funded.",
-        },
-        {
-          name: "collections_status",
-          description:
-            "Whether the account entered collections during servicing.",
-        },
-        {
-          name: "recovery_amount_30d",
-          description:
-            "Recovered amount after delinquency management begins.",
-        },
-        {
-          name: "portfolio_avg_default_rate_full_quarter",
-          description:
-            "Quarterly portfolio default average computed with the full quarter, including future observations.",
-        },
-      ],
-      pipeline_notes:
-        "Random split at the loan level even when borrowers have multiple accounts. Portfolio aggregates are recomputed globally each quarter using all rows. Collections features remain in the training matrix.",
+      preprocessing_code: `import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+
+df = pd.read_csv("loans.csv")
+
+# Compute portfolio default rate using ALL rows (including future observations)
+df["portfolio_avg_default_rate_full_quarter"] = df.groupby("quarter")["default_within_90_days"].transform("mean")
+
+le = LabelEncoder()
+df["collections_status"] = le.fit_transform(df["collections_status"])
+
+feature_cols = ["fico_at_application", "debt_to_income",
+                "delinquency_60d_after_origination", "collections_status",
+                "recovery_amount_30d", "portfolio_avg_default_rate_full_quarter"]
+
+X = df[feature_cols]
+y = df["default_within_90_days"]
+
+# Random split at the loan level even when borrowers have multiple accounts
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)`,
     },
     expected_findings: [
       "Borrower behavior after origination is leaking into the label window.",

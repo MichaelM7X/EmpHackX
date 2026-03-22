@@ -5,7 +5,6 @@ export async function generateNarrativeReport(
   request: AuditRequest,
   findings: AuditFinding[],
   overallRisk: string,
-  safeFeatures: string[],
 ): Promise<string> {
   const findingsJson = JSON.stringify(
     findings.map((f) => ({
@@ -27,13 +26,10 @@ Keep it under 500 words.`;
 
   const userPrompt = `Prediction task: ${request.prediction_goal}
 Target: ${request.target_column}
-Prediction time point: ${request.prediction_time_point}
 Overall risk: ${overallRisk.toUpperCase()}
 
 Findings:
 ${findingsJson}
-
-Safe features (passed all checks): ${safeFeatures.length > 0 ? safeFeatures.join(", ") : "none identified"}
 
 Write the audit report as a natural language narrative.`;
 

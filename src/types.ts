@@ -25,12 +25,9 @@ export interface FeatureDictionaryEntry {
 export interface AuditRequest {
   prediction_goal: string;
   target_column: string;
-  feature_dictionary: FeatureDictionaryEntry[];
-  timestamp_fields: string[];
-  entity_keys: string[];
-  pipeline_notes: string;
-  prediction_time_point: string;
-  preprocessing_code?: string;
+  csv_columns: string[];
+  preprocessing_code: string;
+  model_training_code?: string;
 }
 
 export interface AuditFinding {
@@ -52,12 +49,9 @@ export interface AuditReport {
   summary: string;
   narrative_report: string;
   findings: AuditFinding[];
-  safe_features: string[];
   missing_metadata: string[];
   clarifying_questions: string[];
-  fix_plan: string[];
   bucket_summary: Record<MacroBucket, number>;
-  report_note?: string;
 }
 
 export interface AgentMessage {

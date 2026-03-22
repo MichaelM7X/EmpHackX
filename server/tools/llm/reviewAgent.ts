@@ -108,19 +108,18 @@ async function executeCrossCheck(
   featureName: string,
   reason: string,
 ): Promise<AuditFinding[]> {
-  const feature = request.feature_dictionary.find(
-    (f) => f.name.toLowerCase() === featureName.toLowerCase(),
-  );
-  if (!feature) return [];
+  if (!request.csv_columns.includes(featureName)) return [];
 
   const result = await callOpenAIJson(
-    `You are an ML auditor doing a thorough cross-check of a single feature for ALL types of leakage. You must respond with ONLY valid JSON.`,
+    `You are an ML auditor doing a thorough cross-check of a single feature for ALL types of leakage. Based on the prediction task, infer when the prediction happens. You must respond with ONLY valid JSON.`,
     `Prediction task: ${request.prediction_goal}
 Target: ${request.target_column}
-Prediction time point: ${request.prediction_time_point}
 
-Feature to cross-check: ${feature.name}: ${feature.description}
+Feature to cross-check: ${featureName}
 Reason for cross-check: ${reason}
+
+Preprocessing code context:
+${request.preprocessing_code}
 
 Analyze this feature for:
 1. Proxy leakage: Is it causally downstream of the target?
@@ -178,19 +177,18 @@ async function executeDeepDive(
   featureName: string,
   currentFindingSummary: string,
 ): Promise<AuditFinding[]> {
-  const feature = request.feature_dictionary.find(
-    (f) => f.name.toLowerCase() === featureName.toLowerCase(),
-  );
-  if (!feature) return [];
+  if (!request.csv_columns.includes(featureName)) return [];
 
   const result = await callOpenAIJson(
     `You are an ML auditor performing a deep-dive analysis of a suspicious feature. Provide additional evidence and a more confident assessment. You must respond with ONLY valid JSON.`,
     `Prediction task: ${request.prediction_goal}
 Target: ${request.target_column}
-Prediction time point: ${request.prediction_time_point}
 
-Feature: ${feature.name}: ${feature.description}
+Feature: ${featureName}
 Previous finding: ${currentFindingSummary}
+
+Preprocessing code context:
+${request.preprocessing_code}
 
 Provide a deeper analysis. Consider:
 1. Edge cases where this feature might actually be safe
@@ -297,9 +295,10 @@ export async function reviewAgent(
     )
     .join("\n");
 
-  const featureList = request.feature_dictionary
-    .map((f) => `- ${f.name}: ${f.description}`)
-    .join("\n");
+  const featureColumns = request.csv_columns.filter(
+    (c) => c !== request.target_column,
+  );
+  const featureList = featureColumns.map((f) => `- ${f}`).join("\n");
 
   const systemPrompt = `You are the Review Agent for LeakGuard, an ML pipeline auditor.
 
@@ -322,9 +321,8 @@ checks when genuinely warranted. Do not repeat checks that Phase 1 already did w
 
 Prediction task: ${request.prediction_goal}
 Target column: ${request.target_column}
-Prediction time point: ${request.prediction_time_point}
 
-All features:
+All feature columns:
 ${featureList}
 
 Phase 1 findings:
