@@ -1,21 +1,21 @@
+import { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Send, Sparkles } from 'lucide-react';
+import { useChat } from '../hooks/useChat';
+import type { ChatContext, SharedChatState } from '../hooks/useChat';
+import type { AuditReport, AuditRequest } from '../../types';
 
 function renderMarkdown(text: string) {
   return text.split('\n').map((line, i, arr) => {
     const parts = line.split(/\*\*(.+?)\*\*/g);
     return (
       <span key={i}>
-        {parts.map((part, j) => j % 2 === 1 ? <strong key={j}>{part}</strong> : part)}
+        {parts.map((part, j) => (j % 2 === 1 ? <strong key={j}>{part}</strong> : part))}
         {i < arr.length - 1 && <br />}
       </span>
     );
   });
 }
-import { useRef, useEffect } from 'react';
-import { useChat } from '../hooks/useChat';
-import type { ChatContext, SharedChatState } from '../hooks/useChat';
-import type { AuditReport, AuditRequest } from '../../types';
 
 interface InlineChatProps {
   context: ChatContext;
@@ -59,8 +59,8 @@ export function InlineChat({ context, auditContext, shared }: InlineChatProps) {
         <h3 className="text-sm font-medium text-[var(--foreground)]">Ask Olarion</h3>
       </div>
 
-      {/* Unified body — prompts live in the same space as conversation */}
-      <div className="px-6 pt-5 pb-3 min-h-[80px] max-h-[320px] overflow-y-auto space-y-3 bg-slate-50/60">
+      {/* Unified body — prompts left-aligned to match findings / report sections */}
+      <div className="px-6 pt-5 pb-3 min-h-[80px] max-h-[320px] overflow-y-auto space-y-3 bg-white/40">
         <AnimatePresence>
           {conversation.length === 0 && (
             <motion.div
@@ -69,19 +69,21 @@ export function InlineChat({ context, auditContext, shared }: InlineChatProps) {
               transition={{ duration: 0.18 }}
               className="overflow-hidden"
             >
-              <div className="flex flex-col items-center gap-1.5 w-full">
+              <p className="text-xs text-[var(--muted-foreground)] mb-3">Suggested questions</p>
+              <div className="flex flex-col items-stretch gap-2 w-full">
                 {prompts.map((prompt, idx) => (
                   <motion.button
                     key={idx}
+                    type="button"
                     onClick={() => handlePromptClick(prompt)}
                     whileHover={{
-                      backgroundColor: 'rgba(255,255,255,0.9)',
+                      backgroundColor: 'rgba(255,255,255,0.95)',
                       y: -1,
                       boxShadow: '0 4px 16px rgba(167,191,251,0.18)',
                       transition: { duration: 0.15, ease: 'easeOut' },
                     }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-80 px-5 py-2.5 rounded-xl bg-white/60 border border-[var(--border)]/50 text-sm text-[var(--foreground)] transition-colors text-center"
+                    className="w-full px-4 py-2.5 rounded-xl bg-white/70 border border-[var(--border)]/50 text-sm text-[var(--foreground)] transition-colors text-left leading-snug"
                   >
                     {prompt}
                   </motion.button>
