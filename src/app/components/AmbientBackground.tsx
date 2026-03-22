@@ -19,9 +19,14 @@ export function AmbientBackground({ variant = 'subtle', className = '' }: Ambien
       'rgba(239, 246, 255, 0.5)',
     ],
     minimal: [
-      'rgba(191, 219, 254, 0.5)',   
+      'rgba(191, 219, 254, 0.5)',
       'rgba(224, 242, 254, 0.45)',
       'rgba(239, 246, 255, 0.4)',
+    ],
+    midpage: [
+      'rgba(191, 219, 254, 0.55)',
+      'rgba(224, 242, 254, 0.5)',
+      'rgba(239, 246, 255, 0.45)',
     ],
   };
 
@@ -41,7 +46,7 @@ export function AmbientBackground({ variant = 'subtle', className = '' }: Ambien
       transition: {
         duration: 12,
         repeat: Infinity,
-        ease: 'easeInOut',
+        ease: 'easeInOut' as const,
       },
     },
   };
@@ -59,7 +64,7 @@ export function AmbientBackground({ variant = 'subtle', className = '' }: Ambien
       transition: {
         duration: 15,
         repeat: Infinity,
-        ease: 'easeInOut',
+        ease: 'easeInOut' as const,
         delay: 1,
       },
     },
@@ -78,7 +83,7 @@ export function AmbientBackground({ variant = 'subtle', className = '' }: Ambien
       transition: {
         duration: 10,
         repeat: Infinity,
-        ease: 'easeInOut',
+        ease: 'easeInOut' as const,
         delay: 3,
       },
     },

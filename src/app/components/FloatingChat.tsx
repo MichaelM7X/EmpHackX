@@ -190,7 +190,7 @@ export function FloatingChat({ context, auditContext, hidden = false, shared }: 
                         }`}
                         style={msg.role === 'user' ? { background: 'linear-gradient(135deg, #A7BFFB, #7BAAF7)' } : {}}
                       >
-                        {msg.text}
+                        {msg.role === 'assistant' ? renderMarkdown(msg.text) : msg.text}
                       </div>
                     </motion.div>
                   ))}
@@ -244,6 +244,18 @@ export function FloatingChat({ context, auditContext, hidden = false, shared }: 
       </AnimatePresence>
     </div>
   );
+}
+
+function renderMarkdown(text: string) {
+  return text.split('\n').map((line, i) => {
+    const parts = line.split(/\*\*(.+?)\*\*/g);
+    return (
+      <span key={i}>
+        {parts.map((part, j) => j % 2 === 1 ? <strong key={j}>{part}</strong> : part)}
+        {i < text.split('\n').length - 1 && <br />}
+      </span>
+    );
+  });
 }
 
 function getContextPrompt(context: string): string {

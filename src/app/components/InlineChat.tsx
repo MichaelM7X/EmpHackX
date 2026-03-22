@@ -1,5 +1,17 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { Send, Sparkles } from 'lucide-react';
+
+function renderMarkdown(text: string) {
+  return text.split('\n').map((line, i, arr) => {
+    const parts = line.split(/\*\*(.+?)\*\*/g);
+    return (
+      <span key={i}>
+        {parts.map((part, j) => j % 2 === 1 ? <strong key={j}>{part}</strong> : part)}
+        {i < arr.length - 1 && <br />}
+      </span>
+    );
+  });
+}
 import { useRef, useEffect } from 'react';
 import { useChat } from '../hooks/useChat';
 import type { ChatContext, SharedChatState } from '../hooks/useChat';
@@ -95,7 +107,7 @@ export function InlineChat({ context, auditContext, shared }: InlineChatProps) {
               }`}
               style={msg.role === 'user' ? { background: 'linear-gradient(135deg, #A7BFFB, #7BAAF7)' } : {}}
             >
-              {msg.text}
+              {msg.role === 'assistant' ? renderMarkdown(msg.text) : msg.text}
             </div>
           </motion.div>
         ))}
