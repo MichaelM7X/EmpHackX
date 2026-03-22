@@ -2,6 +2,47 @@
 
 An audit agent that detects data leakage in machine learning pipelines before models go to production. Built for EmpireHacks 2026 (Track 2: The Auditor).
 
+**Teammates:** Youzhu Jin, Dennis Wang, Michael Meng, Weicong Hong
+
+## Quick start — try Olarion without your own data
+
+If you don’t have a CSV + pipeline yet, use the bundled **`test dataset/`** on GitHub (same layout as in a local clone).
+
+**Set your repo base** (forks: replace owner/name):
+
+`https://github.com/skjdsk/Olarion`
+
+| What you need | Link |
+|---------------|------|
+| **Whole project + all demos** | [Download `main` as ZIP](https://github.com/skjdsk/Olarion/archive/refs/heads/main.zip) — after unzipping, open `test dataset/<folder>/`. |
+| **Single demo bundle** | Use the row for that folder in the table below: ZIP downloads; each `.txt` opens in the browser — **select all → copy** into the app. |
+
+### Demo bundles (ZIP + text to paste)
+
+Click **ZIP** to download. Click **Task** / **Target** to open the raw text file, then copy into **Prediction task description** and **Target column name** on the setup page.
+
+| Folder | ZIP | Task (`Prediction task description.txt`) | Target (`Target column name.txt`) |
+|--------|-----|------------------------------------------|-----------------------------------|
+| `clean-demo` | [download](https://github.com/skjdsk/Olarion/raw/main/test%20dataset/clean-demo/clean-demo.zip) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/clean-demo/Prediction%20task%20description.txt) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/clean-demo/Target%20column%20name.txt) |
+| `finance-clean` | [download](https://github.com/skjdsk/Olarion/raw/main/test%20dataset/finance-clean/finance-clean.zip) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/finance-clean/Prediction%20task%20description.txt) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/finance-clean/Target%20column%20name.txt) |
+| `finance-leaky` | [download](https://github.com/skjdsk/Olarion/raw/main/test%20dataset/finance-leaky/finance-leaky.zip) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/finance-leaky/Prediction%20task%20description.txt) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/finance-leaky/Target%20column%20name.txt) |
+| `health-clean` | [download](https://github.com/skjdsk/Olarion/raw/main/test%20dataset/health-clean/health-clean.zip) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/health-clean/Prediction%20task%20description.txt) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/health-clean/Target%20column%20name.txt) |
+| `health-leaky` | [download](https://github.com/skjdsk/Olarion/raw/main/test%20dataset/health-leaky/health-leaky.zip) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/health-leaky/Prediction%20task%20description.txt) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/health-leaky/Target%20column%20name.txt) |
+| `leaky-demo` | [download](https://github.com/skjdsk/Olarion/raw/main/test%20dataset/leaky-demo/leaky-demo.zip) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/leaky-demo/Prediction%20task%20description.txt) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/leaky-demo/Target%20column%20name.txt) |
+| `legal-clean` | [download](https://github.com/skjdsk/Olarion/raw/main/test%20dataset/legal-clean/legal-clean.zip) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/legal-clean/Prediction%20task%20description.txt) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/legal-clean/Target%20column%20name.txt) |
+| `legal-leaky` | [download](https://github.com/skjdsk/Olarion/raw/main/test%20dataset/legal-leaky/legal-leaky.zip) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/legal-leaky/Prediction%20task%20description.txt) | [open](https://raw.githubusercontent.com/skjdsk/Olarion/main/test%20dataset/legal-leaky/Target%20column%20name.txt) |
+
+### Run the audit in the app
+
+1. Follow **[Getting Started](#getting-started)** (`npm install`, `.env`, `npm run dev:full`).
+2. Open the app (default **`http://localhost:5173`** — use the URL Vite prints if the port differs).
+3. Go to **`/setup`** (New audit / setup).
+4. **Upload ZIP** — use the demo `.zip` you downloaded (contains `dataset.csv` + Python; the UI extracts them).
+5. Paste **Prediction task description** and **Target column name** from the two text links for that same folder.
+6. Submit and wait for results on **`/results`**.
+
+For what each folder is meant to show (leaky vs clean), see **[Demo Cases (`test dataset/`)](#demo-cases-test-dataset)** below.
+
 ---
 
 ## The Problem
@@ -77,8 +118,8 @@ Data leakage occurs when information from outside the prediction boundary—futu
 ## Getting Started
 
 ```bash
-git clone <repo-url>
-cd EmpHackX
+git clone https://github.com/skjdsk/Olarion.git
+cd Olarion   # or EmpHackX if you cloned under that folder name
 npm install
 ```
 
