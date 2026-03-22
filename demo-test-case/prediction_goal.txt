@@ -1,1 +1,0 @@
-Predict whether a rental listing in New York City will be leased within 7 days of going live on the platform.
