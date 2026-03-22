@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowRight, Upload, FileText, Code, AlertCircle, Clock, Network, Layers, Archive, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import JSZip from 'jszip';
@@ -147,6 +147,23 @@ export function AuditSetup() {
     datasetFile !== null &&
     preprocessingCode.trim() !== '' &&
     !isSubmitting;
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      if (e.key === '1') {
+        setTaskDescription('Predict whether a hospitalized adult will meet criteria for sepsis or septic shock within the first 24 hours of an emergency department encounter, using only information that would be available at the time clinicians must decide on early escalation (triage through early ED course).');
+        setTargetColumn('sepsis_within_24h');
+      } else if (e.key === '2') {
+        setTaskDescription('Predict whether a hospitalized adult will meet criteria for sepsis or septic shock within the first 24 hours of an emergency department encounter, using only information that would be available at the time clinicians must decide on early escalation (triage through early ED course).');
+        setTargetColumn('sepsis_within_24h');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const applyLegalQuickFill = (
     csv: string,
