@@ -148,6 +148,18 @@ export function AuditResults() {
   }, [report]);
 
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
+  const [severityFilter, setSeverityFilter] = useState<'all' | Severity>('all');
+
+  const severityCounts = useMemo(() => {
+    const map: Record<string, number> = { all: findings.length, critical: 0, high: 0, medium: 0, low: 0 };
+    for (const f of findings) map[f.severity] = (map[f.severity] ?? 0) + 1;
+    return map;
+  }, [findings]);
+
+  const filteredFindings = useMemo(() => {
+    if (severityFilter === 'all') return findings;
+    return findings.filter((f) => f.severity === severityFilter);
+  }, [findings, severityFilter]);
 
   const fadeInVariants = {
     hidden: { opacity: 0, y: 10 },
@@ -298,11 +310,13 @@ export function AuditResults() {
           transition={{ delay: 0.1 }}
           className="mb-10"
         >
-          <div className="mb-6">
-            <h2 className="text-2xl text-[var(--foreground)] mb-2">Detailed Findings</h2>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Inspect each flagged item with evidence, severity, and remediation guidance
-            </p>
+          <div className="flex items-end justify-between mb-6">
+            <div>
+              <h2 className="text-2xl text-[var(--foreground)] mb-2">Detailed Findings</h2>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Inspect each flagged item with evidence, severity, and remediation guidance
+              </p>
+            </div>
           </div>
 
           {findings.length === 0 ? (
@@ -310,18 +324,31 @@ export function AuditResults() {
               No issues were flagged for this submission. Review the narrative below for methodology notes.
             </div>
           ) : (
-            <div className="bg-white rounded-lg border border-[var(--border)] shadow-sm divide-y divide-[var(--border)]">
-              {findings.map((finding) => (
-                <FindingItem
-                  key={finding.id}
-                  finding={finding}
-                  expanded={expandedFinding === finding.id}
-                  onToggle={() =>
-                    setExpandedFinding(expandedFinding === finding.id ? null : finding.id)
-                  }
-                />
-              ))}
-            </div>
+            <>
+              <SeverityFilterBar
+                active={severityFilter}
+                counts={severityCounts}
+                onChange={setSeverityFilter}
+              />
+              <div className="bg-white rounded-lg border border-[var(--border)] shadow-sm divide-y divide-[var(--border)]">
+                {filteredFindings.length === 0 ? (
+                  <div className="px-8 py-12 text-center text-sm text-[var(--muted-foreground)]">
+                    No findings match this filter.
+                  </div>
+                ) : (
+                  filteredFindings.map((finding) => (
+                    <FindingItem
+                      key={finding.id}
+                      finding={finding}
+                      expanded={expandedFinding === finding.id}
+                      onToggle={() =>
+                        setExpandedFinding(expandedFinding === finding.id ? null : finding.id)
+                      }
+                    />
+                  ))
+                )}
+              </div>
+            </>
           )}
         </motion.div>
 
@@ -584,6 +611,63 @@ function FindingItem({
           </div>
         </motion.div>
       )}
+    </div>
+  );
+}
+
+const FILTER_OPTIONS: Array<{ key: 'all' | Severity; label: string; dot?: string; icon?: typeof AlertTriangle }> = [
+  { key: 'all', label: 'All' },
+  { key: 'critical', label: 'Critical', dot: 'bg-red-500', icon: AlertTriangle },
+  { key: 'high', label: 'High', dot: 'bg-orange-500', icon: AlertCircle },
+  { key: 'medium', label: 'Medium', dot: 'bg-amber-500', icon: Info },
+  { key: 'low', label: 'Low', dot: 'bg-lime-500', icon: CheckCircle },
+];
+
+function SeverityFilterBar({
+  active,
+  counts,
+  onChange,
+}: {
+  active: 'all' | Severity;
+  counts: Record<string, number>;
+  onChange: (value: 'all' | Severity) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 mb-4 p-1 bg-[var(--secondary)] rounded-xl border border-[var(--border)] w-fit">
+      {FILTER_OPTIONS.map(({ key, label, dot }) => {
+        const count = counts[key] ?? 0;
+        if (key !== 'all' && count === 0) return null;
+        const isActive = active === key;
+
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onChange(key)}
+            className={`
+              relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+              ${isActive
+                ? 'bg-white text-[var(--foreground)] shadow-sm border border-[var(--border)]'
+                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)] border border-transparent'
+              }
+            `}
+          >
+            {dot && <span className={`w-2 h-2 rounded-full ${dot} flex-shrink-0`} />}
+            <span>{label}</span>
+            <span
+              className={`
+                min-w-[20px] h-5 flex items-center justify-center rounded-full text-xs font-semibold px-1.5
+                ${isActive
+                  ? 'bg-[var(--primary)] text-white'
+                  : 'bg-[var(--border)] text-[var(--muted-foreground)]'
+                }
+              `}
+            >
+              {count}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
