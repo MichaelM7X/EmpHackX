@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  Download,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AmbientBackground } from '../components/AmbientBackground';
@@ -21,6 +22,7 @@ import { Footer } from '../components/Footer';
 import type { AuditFinding, AuditReport, AuditRequest, Severity } from '../../types';
 import { auditWithLLM } from '../../lib/llmEngine';
 import { buildAuditRecord, saveAuditRecord } from '../lib/storage';
+import { downloadAuditZip } from '../lib/exportZip';
 
 type LeakageType = 'temporal' | 'feature' | 'pipeline';
 
@@ -233,6 +235,14 @@ export function AuditResults() {
               Back to Setup
             </Link>
           </div>
+          <button
+            type="button"
+            onClick={() => downloadAuditZip(report)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)] bg-white text-sm text-[var(--foreground)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)] transition-colors shadow-sm"
+          >
+            <Download className="w-4 h-4" />
+            Download Report
+          </button>
         </div>
 
         <motion.div initial="hidden" animate="visible" variants={fadeInVariants} className="mb-10">
