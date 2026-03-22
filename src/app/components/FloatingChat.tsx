@@ -80,11 +80,13 @@ export function FloatingChat({ context, auditContext, hidden = false, shared }: 
           animate={!isOpen ? { y: [0, -4, 0] } : {}}
           transition={!isOpen ? { y: { duration: 2.5, repeat: Infinity, ease: 'easeInOut' } } : {}}
           onClick={() => (isOpen ? setIsOpen(false) : setIsOpen(true))}
-          className="relative w-14 h-14 rounded-full text-white shadow-lg flex items-center justify-center overflow-hidden"
+          className="relative w-14 h-14 rounded-full text-white flex items-center justify-center overflow-hidden"
           style={{
             background: 'linear-gradient(135deg, #A7BFFB, #7BAAF7, #BFDBFE, #A7BFFB)',
             backgroundSize: '300% 300%',
-            animation: 'gradientShift 6s ease infinite',
+            animation: 'gradientShift 14s ease infinite',
+            boxShadow: '0 4px 24px rgba(167,191,251,0.55), 0 1px 6px rgba(167,191,251,0.3)',
+            filter: 'drop-shadow(0 0 8px rgba(167,191,251,0.4))',
           }}
         >
           <AnimatePresence mode="wait">
@@ -94,7 +96,7 @@ export function FloatingChat({ context, auditContext, hidden = false, shared }: 
               </motion.div>
             ) : (
               <motion.div key="bot" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.2 }}>
-                <Bot className="w-5 h-5" />
+                <Bot className="w-7 h-7" />
               </motion.div>
             )}
           </AnimatePresence>
@@ -126,7 +128,7 @@ export function FloatingChat({ context, auditContext, hidden = false, shared }: 
                   style={{
                     background: 'linear-gradient(135deg, #A7BFFB, #7BAAF7, #BFDBFE, #A7BFFB)',
                     backgroundSize: '300% 300%',
-                    animation: 'gradientShift 6s ease infinite',
+                    animation: 'gradientShift 14s ease infinite',
                   }}
                 >
                   <Sparkles className="w-3.5 h-3.5 text-white" />

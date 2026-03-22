@@ -129,30 +129,18 @@ export function ClarionLogo({ className = '', size = 36, animate = true }: Clari
         )}
       </path>
 
-      {/* White shield */}
-      <path
-        d="M420.667 322.301C420.667 385.745 374.656 417.467 319.97 435.866C317.106 436.803 313.995 436.758 311.162 435.739C256.344 417.467 210.333 385.745 210.333 322.301V233.48C210.333 230.114 211.718 226.887 214.184 224.507C216.649 222.128 219.993 220.791 223.479 220.791C249.771 220.791 282.635 205.564 305.509 186.277C308.294 183.981 311.837 182.719 315.5 182.719C319.163 182.719 322.706 183.981 325.491 186.277C348.496 205.691 381.229 220.791 407.521 220.791C411.007 220.791 414.351 222.128 416.816 224.507C419.282 226.887 420.667 230.114 420.667 233.48V322.301Z"
-        stroke="white"
-        strokeWidth={size < 40 ? 40 : 26.2917}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      {/* White stroke elements scaled down slightly, centred on shield */}
+      <g transform="translate(315.5,315.5) scale(0.82) translate(-315.5,-315.5)">
+        {/* White shield */}
+        <path
+          d="M420.667 322.301C420.667 385.745 374.656 417.467 319.97 435.866C317.106 436.803 313.995 436.758 311.162 435.739C256.344 417.467 210.333 385.745 210.333 322.301V233.48C210.333 230.114 211.718 226.887 214.184 224.507C216.649 222.128 219.993 220.791 223.479 220.791C249.771 220.791 282.635 205.564 305.509 186.277C308.294 183.981 311.837 182.719 315.5 182.719C319.163 182.719 322.706 183.981 325.491 186.277C348.496 205.691 381.229 220.791 407.521 220.791C411.007 220.791 414.351 222.128 416.816 224.507C419.282 226.887 420.667 230.114 420.667 233.48V322.301Z"
+          stroke="white"
+          strokeWidth={size < 40 ? 40 : 26.2917}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
 
-      {/* Robot eyes — two short vertical white lines */}
-      <line x1="280" y1="274" x2="280" y2="308"
-        stroke="white" strokeWidth={size < 40 ? 40 : 26.2917} strokeLinecap="round"
-      >
-        {animate && (
-          <animate attributeName="y2" values="308;308;282;308;308" keyTimes="0;0.72;0.75;0.78;1" dur="5s" repeatCount="indefinite" />
-        )}
-      </line>
-      <line x1="350" y1="274" x2="350" y2="308"
-        stroke="white" strokeWidth={size < 40 ? 40 : 26.2917} strokeLinecap="round"
-      >
-        {animate && (
-          <animate attributeName="y2" values="308;308;282;308;308" keyTimes="0;0.72;0.75;0.78;1" dur="5s" repeatCount="indefinite" />
-        )}
-      </line>
+      </g>
     </svg>
   );
 }

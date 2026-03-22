@@ -97,10 +97,9 @@ export function Landing() {
           variants={fadeUpVariants}
           className="text-base text-center mb-12 text-[var(--muted-foreground)] max-w-2xl mx-auto"
         >
-          A domain-aware leakage audit agent that detects temporal, feature, and structural leakage
-          before you trust results or deploy your model.
+          A domain-aware audit agent that surfaces hidden methodological risks before you trust results or deploy your model.
           <br />
-          Built for high-stakes environments where methodological integrity matters.
+          Built for high-stakes environments where integrity matters.
         </motion.p>
 
         <motion.div
