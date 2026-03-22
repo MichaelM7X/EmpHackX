@@ -1,5 +1,6 @@
 import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { callOpenAIJson } from "../../openaiClient";
+import { extractSnippet } from "../../utils";
 
 export async function detectProxyLeakage(
   request: AuditRequest,
@@ -68,18 +69,23 @@ Respond in this exact JSON format:
 
     const rawEvidence = (item.evidence as Array<Record<string, unknown>>) ?? [];
     const featureName = String(item.feature_name ?? "unknown");
+    const code = request.preprocessing_code ?? "";
     const evidence: EvidenceItem[] = rawEvidence.length > 0
-      ? rawEvidence.map((e) => ({
-          claim: String((e.claim as string) ?? item.reasoning ?? "Proxy leakage risk detected"),
-          source: {
-            filename: String(((e.source as Record<string, unknown>)?.filename) ?? "dataset.csv"),
-            location: String(((e.source as Record<string, unknown>)?.location) ?? `column '${item.feature_name}'`),
-          },
-        }))
+      ? rawEvidence.map((e) => {
+          const fname = String(((e.source as Record<string, unknown>)?.filename) ?? "dataset.csv");
+          const loc = String(((e.source as Record<string, unknown>)?.location) ?? `column '${item.feature_name}'`);
+          const snippet = fname.includes(".py") || fname.includes("code")
+            ? extractSnippet(code, featureName)
+            : featureName;
+          return {
+            claim: String((e.claim as string) ?? item.reasoning ?? "Proxy leakage risk detected"),
+            source: { filename: fname, location: loc, snippet },
+          };
+        })
       : [
           {
             claim: String(item.reasoning ?? "LLM detected proxy leakage risk."),
-            source: { filename: "dataset.csv", location: `column '${item.feature_name}'` },
+            source: { filename: "dataset.csv", location: `column '${featureName}'`, snippet: featureName },
           },
         ];
 

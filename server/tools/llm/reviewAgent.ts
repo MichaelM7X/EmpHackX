@@ -1,5 +1,6 @@
 import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { client, callOpenAIJson } from "../../openaiClient";
+import { extractSnippet } from "../../utils";
 import type {
   ChatCompletionTool,
   ChatCompletionMessageParam,
@@ -155,22 +156,27 @@ Respond in JSON:
       item.leakage_type === "temporal" ? "Time leakage" : "Feature / proxy leakage";
 
     const rawEvidence = (item.evidence as Array<Record<string, unknown>>) ?? [];
+    const code = request.preprocessing_code ?? "";
     const evidence: EvidenceItem[] = rawEvidence.length > 0
-      ? rawEvidence.map((e) => ({
-          claim: String((e.claim as string) ?? item.reasoning ?? "Issue detected"),
-          source: {
-            filename: String(((e.source as Record<string, unknown>)?.filename) ?? "dataset.csv"),
-            location: String(((e.source as Record<string, unknown>)?.location) ?? `column '${featureName}'`),
-          },
-        }))
+      ? rawEvidence.map((e) => {
+          const fname = String(((e.source as Record<string, unknown>)?.filename) ?? "dataset.csv");
+          const loc = String(((e.source as Record<string, unknown>)?.location) ?? `column '${featureName}'`);
+          const snippet = fname.includes(".py") || fname.includes("code")
+            ? extractSnippet(code, featureName)
+            : featureName;
+          return {
+            claim: String((e.claim as string) ?? item.reasoning ?? "Issue detected"),
+            source: { filename: fname, location: loc, snippet },
+          };
+        })
       : [
           {
             claim: `Review Agent cross-check: ${item.reasoning}`,
-            source: { filename: "dataset.csv", location: `column '${featureName}'` },
+            source: { filename: "dataset.csv", location: `column '${featureName}'`, snippet: featureName },
           },
           {
             claim: `Triggered because: ${reason}`,
-            source: { filename: "dataset.csv", location: `column '${featureName}'` },
+            source: { filename: "dataset.csv", location: `column '${featureName}'`, snippet: featureName },
           },
         ];
 
@@ -234,11 +240,11 @@ Respond in JSON:
   const evidence: EvidenceItem[] = [
     {
       claim: `Review Agent deep dive: ${result.refined_reasoning}`,
-      source: { filename: "dataset.csv", location: `column '${featureName}'` },
+      source: { filename: "dataset.csv", location: `column '${featureName}'`, snippet: featureName },
     },
     ...additionalEvidence.map((e) => ({
       claim: e,
-      source: { filename: "dataset.csv", location: `column '${featureName}'` },
+      source: { filename: "dataset.csv", location: `column '${featureName}'`, snippet: featureName },
     })),
   ];
 
@@ -290,11 +296,11 @@ Respond in JSON:
   const evidence: EvidenceItem[] = [
     {
       claim: `Review Agent interaction check: ${result.reasoning}`,
-      source: { filename: "dataset.csv", location: `columns '${featureA}' and '${featureB}'` },
+      source: { filename: "dataset.csv", location: `columns '${featureA}' and '${featureB}'`, snippet: `${featureA}, ${featureB}` },
     },
     {
       claim: `Hypothesis: ${hypothesis}`,
-      source: { filename: "dataset.csv", location: `columns '${featureA}' and '${featureB}'` },
+      source: { filename: "dataset.csv", location: `columns '${featureA}' and '${featureB}'`, snippet: `${featureA}, ${featureB}` },
     },
   ];
 

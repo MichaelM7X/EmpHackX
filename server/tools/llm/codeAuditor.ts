@@ -1,5 +1,6 @@
 import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { callOpenAIJson } from "../../openaiClient";
+import { extractSnippet } from "../../utils";
 
 export interface CodeAuditResult {
   split_method: string | null;
@@ -70,20 +71,31 @@ Respond in this exact JSON format:
     preprocessing: "Structure / pipeline leakage",
   };
 
+  const code = request.preprocessing_code ?? "";
   const findings: AuditFinding[] = issues.map((issue, i) => {
     const rawEvidence = (issue.evidence as Array<Record<string, unknown>>) ?? [];
+    const codeRef = String(issue.code_reference ?? "");
     const evidence: EvidenceItem[] = rawEvidence.length > 0
-      ? rawEvidence.map((e) => ({
-          claim: String((e.claim as string) ?? issue.description ?? "Issue detected"),
-          source: {
-            filename: String(((e.source as Record<string, unknown>)?.filename) ?? "preprocessing_code.py"),
-            location: String(((e.source as Record<string, unknown>)?.location) ?? issue.code_reference ?? "N/A"),
-          },
-        }))
+      ? rawEvidence.map((e) => {
+          const loc = String(((e.source as Record<string, unknown>)?.location) ?? codeRef || "N/A");
+          const keyword = loc.replace(/^line\s*\d+[,:]?\s*/i, "").trim() || codeRef;
+          return {
+            claim: String((e.claim as string) ?? issue.description ?? "Issue detected"),
+            source: {
+              filename: String(((e.source as Record<string, unknown>)?.filename) ?? "preprocessing_code.py"),
+              location: loc,
+              snippet: keyword ? extractSnippet(code, keyword) : undefined,
+            },
+          };
+        })
       : [
           {
             claim: `Code analysis found: ${issue.description}`,
-            source: { filename: "preprocessing_code.py", location: String(issue.code_reference ?? "N/A") },
+            source: {
+              filename: "preprocessing_code.py",
+              location: codeRef || "N/A",
+              snippet: codeRef ? extractSnippet(code, codeRef) : undefined,
+            },
           },
         ];
 

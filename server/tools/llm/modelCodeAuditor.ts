@@ -1,5 +1,6 @@
 import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { callOpenAIJson } from "../../openaiClient";
+import { extractSnippet } from "../../utils";
 
 export async function auditModelTrainingCode(
   request: AuditRequest,
@@ -61,20 +62,31 @@ Respond in this exact JSON format:
   const result = await callOpenAIJson(systemPrompt, userPrompt);
   const issues = (result.issues as Array<Record<string, unknown>>) ?? [];
 
+  const trainingCode = request.model_training_code ?? "";
   return issues.map((issue, i) => {
     const rawEvidence = (issue.evidence as Array<Record<string, unknown>>) ?? [];
+    const codeRef = String(issue.code_reference ?? "");
     const evidence: EvidenceItem[] = rawEvidence.length > 0
-      ? rawEvidence.map((e) => ({
-          claim: String((e.claim as string) ?? issue.description ?? "Issue detected"),
-          source: {
-            filename: String(((e.source as Record<string, unknown>)?.filename) ?? "model_training_code.py"),
-            location: String(((e.source as Record<string, unknown>)?.location) ?? issue.code_reference ?? "N/A"),
-          },
-        }))
+      ? rawEvidence.map((e) => {
+          const loc = String(((e.source as Record<string, unknown>)?.location) ?? codeRef || "N/A");
+          const keyword = loc.replace(/^line\s*\d+[,:]?\s*/i, "").trim() || codeRef;
+          return {
+            claim: String((e.claim as string) ?? issue.description ?? "Issue detected"),
+            source: {
+              filename: String(((e.source as Record<string, unknown>)?.filename) ?? "model_training_code.py"),
+              location: loc,
+              snippet: keyword ? extractSnippet(trainingCode, keyword) : undefined,
+            },
+          };
+        })
       : [
           {
             claim: `Training code analysis found: ${issue.description}`,
-            source: { filename: "model_training_code.py", location: String(issue.code_reference ?? "N/A") },
+            source: {
+              filename: "model_training_code.py",
+              location: codeRef || "N/A",
+              snippet: codeRef ? extractSnippet(trainingCode, codeRef) : undefined,
+            },
           },
         ];
 

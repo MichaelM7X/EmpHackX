@@ -1,4 +1,4 @@
-import { AuditFinding, EvidenceCitation, Severity } from "../src/types";
+import { AuditFinding, EvidenceItem, Severity } from "../src/types";
 
 const severityRank: Record<string, number> = {
   low: 1,
@@ -54,33 +54,31 @@ export function codeEvidence(
   sourceType: "preprocessing_code" | "model_training_code",
   code: string,
   keyword: string,
-): EvidenceCitation {
+): EvidenceItem {
   const line = findLineNumber(code, keyword);
   const fileName = sourceType === "preprocessing_code" ? "preprocessing.py" : "training.py";
-  const label = line ? `${fileName} (line ${line})` : `${fileName} (keyword match)`;
+  const location = line ? `line ${line}` : "keyword match";
   return {
-    text,
-    source_type: sourceType,
-    citation_label: label,
-    citation_detail: extractSnippet(code, keyword),
+    claim: text,
+    source: { filename: fileName, location, snippet: extractSnippet(code, keyword) },
   };
 }
 
-export function llmEvidence(text: string, label = "LLM semantic analysis"): EvidenceCitation {
+export function llmEvidence(text: string): EvidenceItem {
   return {
-    text,
-    source_type: "llm_reasoning",
-    citation_label: label,
-    citation_detail: text,
+    claim: text,
+    source: { filename: "LLM analysis", location: "semantic reasoning" },
   };
 }
 
-export function csvEvidence(text: string, columns: string[]): EvidenceCitation {
+export function csvEvidence(text: string, columns: string[]): EvidenceItem {
   return {
-    text,
-    source_type: "csv_header",
-    citation_label: "CSV columns",
-    citation_detail: columns.join(", "),
+    claim: text,
+    source: {
+      filename: "dataset.csv",
+      location: `columns: ${columns.join(", ")}`,
+      snippet: columns.join(", "),
+    },
   };
 }
 

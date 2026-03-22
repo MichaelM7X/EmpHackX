@@ -51,6 +51,17 @@ function macroToLeakage(macro: AuditFinding['macro_bucket']): LeakageType {
   return 'pipeline';
 }
 
+function normalizeEvidence(raw: EvidenceItem): EvidenceItem {
+  const claim = raw.claim || raw.text || '';
+  const filename = raw.source?.filename || raw.citation_label?.split(' (')[0] || '';
+  const location = raw.source?.location || '';
+  const snippet = raw.source?.snippet || raw.citation_detail || '';
+  return {
+    claim,
+    source: filename ? { filename, location, snippet: snippet || undefined } : undefined,
+  };
+}
+
 function mapFinding(f: AuditFinding): UiFinding {
   return {
     id: f.id,
@@ -58,7 +69,7 @@ function mapFinding(f: AuditFinding): UiFinding {
     leakageType: macroToLeakage(f.macro_bucket),
     severity: f.severity,
     confidence: f.confidence,
-    evidence: f.evidence,
+    evidence: f.evidence.map(normalizeEvidence),
     recommendation: f.fix_recommendation.join(' '),
     humanReviewRequired: f.needs_human_review,
     escalateReason: f.escalate_reason ?? null,
@@ -839,13 +850,35 @@ function ConfidenceBadge({ confidence }: { confidence: AuditFinding['confidence'
   );
 }
 
-function SourceBadge({ filename, location }: { filename: string; location: string }) {
+function SourceBadge({ filename, location, snippet }: { filename: string; location: string; snippet?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasSnippet = !!snippet;
+
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--secondary)] border border-[var(--border)] text-xs text-[var(--muted-foreground)] font-mono">
-      <FileText className="w-3 h-3 flex-shrink-0" />
-      <span className="font-medium text-[var(--foreground)]">{filename}</span>
-      <span className="text-[var(--muted-foreground)]">({location})</span>
-    </span>
+    <div className="inline-flex flex-col">
+      <button
+        type="button"
+        onClick={hasSnippet ? (e) => { e.stopPropagation(); setExpanded(!expanded); } : undefined}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--secondary)] border border-[var(--border)] text-xs text-[var(--muted-foreground)] font-mono transition-colors ${hasSnippet ? 'cursor-pointer hover:bg-[var(--accent-primary)]/10 hover:border-[var(--accent-primary)]/30' : 'cursor-default'}`}
+      >
+        <FileText className="w-3 h-3 flex-shrink-0" />
+        <span className="font-medium text-[var(--foreground)]">{filename}</span>
+        {location && <span className="text-[var(--muted-foreground)]">({location})</span>}
+        {hasSnippet && (
+          <ChevronDown className={`w-3 h-3 ml-0.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        )}
+      </button>
+      {expanded && snippet && (
+        <motion.pre
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="mt-1.5 px-3 py-2 rounded-md bg-[#1e1e2e] text-[#cdd6f4] text-xs font-mono leading-relaxed overflow-x-auto border border-[var(--border)] whitespace-pre-wrap"
+        >
+          {snippet}
+        </motion.pre>
+      )}
+    </div>
   );
 }
 
@@ -965,17 +998,22 @@ function FindingItem({
               Evidence
             </h4>
             <ul className="space-y-3">
-              {finding.evidence.map((item, idx) => (
-                <li key={idx} className="flex flex-col gap-1.5">
-                  <div className="flex items-start gap-3 text-sm text-[var(--foreground)]">
-                    <span className="text-[var(--accent-primary)] mt-1 font-bold flex-shrink-0">•</span>
-                    <span className="leading-relaxed">{item.claim}</span>
-                  </div>
-                  <div className="ml-5">
-                    <SourceBadge filename={item.source.filename} location={item.source.location} />
-                  </div>
-                </li>
-              ))}
+              {finding.evidence.map((item, idx) => {
+                if (!item.claim) return null;
+                return (
+                  <li key={idx} className="flex flex-col gap-1.5">
+                    <div className="flex items-start gap-3 text-sm text-[var(--foreground)]">
+                      <span className="text-[var(--accent-primary)] mt-1 font-bold flex-shrink-0">•</span>
+                      <span className="leading-relaxed">{item.claim}</span>
+                    </div>
+                    {item.source?.filename && (
+                      <div className="ml-5">
+                        <SourceBadge filename={item.source.filename} location={item.source.location ?? ''} snippet={item.source.snippet} />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
           <div>

@@ -1,8 +1,10 @@
 import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
+import { extractSnippet } from "../../utils";
 
 export function pipelineScan(request: AuditRequest): AuditFinding[] {
   const findings: AuditFinding[] = [];
-  const code = (request.preprocessing_code ?? "").toLowerCase();
+  const rawCode = request.preprocessing_code ?? "";
+  const code = rawCode.toLowerCase();
 
   if (!code) return findings;
 
@@ -29,11 +31,11 @@ export function pipelineScan(request: AuditRequest): AuditFinding[] {
     const entityEvidence: EvidenceItem[] = [
       {
         claim: "Preprocessing code uses train_test_split without group-based splitting.",
-        source: { filename: "preprocessing_code.py", location: "train_test_split call" },
+        source: { filename: "preprocessing_code.py", location: "train_test_split call", snippet: extractSnippet(rawCode, "train_test_split") },
       },
       {
         claim: `Likely entity ID columns detected: ${idCols.join(", ")}.`,
-        source: { filename: "dataset.csv", location: `columns: ${idCols.join(", ")}` },
+        source: { filename: "dataset.csv", location: `columns: ${idCols.join(", ")}`, snippet: idCols.join(", ") },
       },
     ];
     findings.push({
@@ -79,11 +81,11 @@ export function pipelineScan(request: AuditRequest): AuditFinding[] {
       const globalEvidence: EvidenceItem[] = [
         {
           claim: `Code contains ${label} before the train/test split.`,
-          source: { filename: "preprocessing_code.py", location: pattern },
+          source: { filename: "preprocessing_code.py", location: pattern, snippet: extractSnippet(rawCode, pattern.replace("(", "")) },
         },
         {
           claim: "Preprocessing fitted before split leaks test distribution into training.",
-          source: { filename: "preprocessing_code.py", location: "fit/fit_transform before split call" },
+          source: { filename: "preprocessing_code.py", location: "fit/fit_transform before split call", snippet: extractSnippet(rawCode, "split") },
         },
       ];
       findings.push({

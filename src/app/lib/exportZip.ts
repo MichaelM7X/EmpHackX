@@ -47,8 +47,14 @@ function buildMarkdown(report: AuditReport): string {
     lines.push("");
     lines.push("**Evidence:**");
     for (const e of f.evidence) {
-      lines.push(`- ${e.claim}`);
-      lines.push(`  _Source: ${e.source.filename} (${e.source.location})_`);
+      const claim = e.claim || e.text || '';
+      if (!claim) continue;
+      lines.push(`- ${claim}`);
+      const fname = e.source?.filename || e.citation_label?.split(' (')[0] || '';
+      const loc = e.source?.location || e.citation_label || '';
+      if (fname) {
+        lines.push(`  _Source: ${fname}${loc ? ` (${loc})` : ''}_`);
+      }
     }
     lines.push("");
     lines.push("**Recommendation:**");
@@ -157,8 +163,14 @@ function buildPdf(report: AuditReport): ArrayBuffer {
     addGap(1);
     addText(`Why it matters: ${f.why_it_matters}`, 9);
     for (const e of f.evidence) {
-      addText(`  • ${e.claim}`, 9);
-      addText(`    Source: ${e.source.filename} (${e.source.location})`, 8);
+      const claim = e.claim || e.text || '';
+      if (!claim) continue;
+      addText(`  • ${claim}`, 9);
+      const fname = e.source?.filename || e.citation_label?.split(' (')[0] || '';
+      const loc = e.source?.location || e.citation_label || '';
+      if (fname) {
+        addText(`    Source: ${fname}${loc ? ` (${loc})` : ''}`, 8);
+      }
     }
     addText(`Recommendation: ${f.fix_recommendation.join(" ")}`, 9);
     addGap(2);

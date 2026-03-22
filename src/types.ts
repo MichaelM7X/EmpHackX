@@ -31,11 +31,17 @@ export interface AuditRequest {
 }
 
 export interface EvidenceItem {
-  claim: string;
-  source: {
+  claim?: string;
+  source?: {
     filename: string;
     location: string;
+    snippet?: string;
   };
+  // Legacy EvidenceCitation fields — some detectors or cached data may use this shape
+  text?: string;
+  citation_label?: string;
+  citation_detail?: string;
+  source_type?: string;
 }
 
 export interface AuditFinding {
