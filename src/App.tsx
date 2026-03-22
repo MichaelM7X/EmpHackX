@@ -1,8 +1,12 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { demoCases } from "./data/demoCases";
-import { answerQuestion, auditRequest, parseCsvHeader } from "./lib/auditEngine";
+import { FormEvent, useRef, useState } from "react";
+import { demoCases, DemoCase } from "./data/demoCases";
 import { auditWithLLM, chatWithLLM } from "./lib/llmEngine";
-import { AgentMessage, AuditFinding, AuditReport, AuditRequest, DemoCaseConfig } from "./types";
+import {
+  AgentMessage,
+  AuditFinding,
+  AuditReport,
+  AuditRequest,
+} from "./types";
 
 const traceSteps = [
   {
@@ -11,35 +15,25 @@ const traceSteps = [
   },
   {
     title: "Check time leakage",
-    detail: "Inspect feature availability and derived aggregate windows.",
+    detail: "LLM inspects feature availability and derived aggregate windows.",
   },
   {
     title: "Check feature proxies",
-    detail: "Flag label-adjacent fields and downstream workflow signals.",
+    detail: "LLM flags label-adjacent fields and downstream workflow signals.",
   },
   {
     title: "Check structure leakage",
-    detail: "Review split design, repeated entities, and global preprocessing.",
+    detail:
+      "Rules + code audit review split design, repeated entities, and global preprocessing.",
   },
   {
-    title: "Generate report",
-    detail: "Write evidence-backed findings, fixes, and follow-up questions.",
+    title: "Generate narrative report",
+    detail: "LLM writes evidence-backed findings, fixes, and follow-up questions.",
   },
 ];
 
 function cloneRequest(request: AuditRequest): AuditRequest {
   return JSON.parse(JSON.stringify(request)) as AuditRequest;
-}
-
-function unique(items: string[]) {
-  return Array.from(new Set(items));
-}
-
-function buildIntroMessage(demoCase: DemoCaseConfig, report: AuditReport): AgentMessage {
-  return {
-    role: "assistant",
-    content: `${demoCase.narrator_line} Current risk is ${report.overall_risk.toUpperCase()}, with ${report.findings.length} flagged findings ready to inspect.`,
-  };
 }
 
 function joinValues(values: string[]) {
@@ -53,94 +47,107 @@ function splitValues(value: string) {
     .filter(Boolean);
 }
 
-function riskLabelClass(risk: AuditReport["overall_risk"]) {
+function riskLabelClass(risk: string) {
   return `risk-pill risk-${risk}`;
 }
 
-function findingClassName(finding: AuditFinding, selectedFindingId: string | null) {
+function findingClassName(
+  finding: AuditFinding,
+  selectedFindingId: string | null,
+) {
   const isSelected = selectedFindingId === finding.id;
   return `finding-card ${isSelected ? "is-selected" : ""}`;
 }
 
 export default function App() {
   const [activeCaseId, setActiveCaseId] = useState(demoCases[0].case_id);
-  const activeCase = useMemo(
-    () => demoCases.find((demoCase) => demoCase.case_id === activeCaseId) ?? demoCases[0],
-    [activeCaseId],
-  );
+  const activeCase = demoCases.find((c) => c.case_id === activeCaseId) ?? demoCases[0];
 
   const [request, setRequest] = useState<AuditRequest>(() =>
     cloneRequest(demoCases[0].default_inputs),
   );
-  const [report, setReport] = useState<AuditReport>(() =>
-    auditRequest(demoCases[0].default_inputs, demoCases[0]),
-  );
-  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(
-    report.findings[0]?.id ?? null,
-  );
+  const [report, setReport] = useState<AuditReport | null>(null);
+  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<AgentMessage[]>([
-    buildIntroMessage(demoCases[0], report),
+    {
+      role: "assistant",
+      content: `${demoCases[0].narrator_line} Click "Run Audit" to start the analysis.`,
+    },
   ]);
   const [chatInput, setChatInput] = useState("");
   const [isRunning, setIsRunning] = useState(false);
-  const [traceIndex, setTraceIndex] = useState(traceSteps.length);
+  const [traceIndex, setTraceIndex] = useState(-1);
   const [lastRunLabel, setLastRunLabel] = useState("Ready");
   const [copyStatus, setCopyStatus] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const pendingReportRef = useRef<Promise<AuditReport> | null>(null);
+  const [pipelineTab, setPipelineTab] = useState<"notes" | "code">("notes");
+  const traceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    const nextRequest = cloneRequest(activeCase.default_inputs);
-    const nextReport = auditRequest(nextRequest, activeCase);
+  const switchCase = (caseItem: DemoCase) => {
+    setActiveCaseId(caseItem.case_id);
+    const nextRequest = cloneRequest(caseItem.default_inputs);
     setRequest(nextRequest);
-    setReport(nextReport);
-    setSelectedFindingId(nextReport.findings[0]?.id ?? null);
-    setChatMessages([buildIntroMessage(activeCase, nextReport)]);
+    setReport(null);
+    setSelectedFindingId(null);
+    setChatMessages([
+      {
+        role: "assistant",
+        content: `${caseItem.narrator_line} Click "Run Audit" to start the analysis.`,
+      },
+    ]);
     setIsRunning(false);
-    setTraceIndex(traceSteps.length);
+    setTraceIndex(-1);
     setLastRunLabel("Loaded demo defaults");
     setCopyStatus("");
-  }, [activeCase]);
+    setPipelineTab("notes");
+  };
 
-  useEffect(() => {
-    if (!isRunning) {
-      return undefined;
-    }
+  const resetToDefaults = () => {
+    switchCase(activeCase);
+  };
 
-    if (traceIndex < traceSteps.length) {
-      const timer = window.setTimeout(() => {
-        setTraceIndex((current) => current + 1);
-      }, 520);
-      return () => window.clearTimeout(timer);
-    }
+  const runAudit = async () => {
+    setIsRunning(true);
+    setTraceIndex(0);
+    setCopyStatus("");
 
-    // Animation complete — await the LLM result (or fall back to rule engine)
-    let cancelled = false;
-
-    const finish = async () => {
-      let nextReport: AuditReport;
-      try {
-        if (pendingReportRef.current) {
-          nextReport = await pendingReportRef.current;
-          pendingReportRef.current = null;
-        } else {
-          nextReport = auditRequest(request, activeCase);
-        }
-      } catch {
-        nextReport = auditRequest(request, activeCase);
+    let step = 0;
+    traceTimerRef.current = setInterval(() => {
+      step += 1;
+      if (step < traceSteps.length) {
+        setTraceIndex(step);
+      } else if (traceTimerRef.current) {
+        clearInterval(traceTimerRef.current);
+        traceTimerRef.current = null;
       }
+    }, 600);
 
-      if (cancelled) return;
-
+    try {
+      const nextReport = await auditWithLLM(request);
       setReport(nextReport);
       setSelectedFindingId(nextReport.findings[0]?.id ?? null);
-      setChatMessages((currentMessages) => [
-        ...currentMessages,
+      setChatMessages((msgs) => [
+        ...msgs,
         {
           role: "assistant",
           content: `Audit finished. ${nextReport.summary}`,
         },
       ]);
+    } catch (error) {
+      console.error("Audit failed:", error);
+      setChatMessages((msgs) => [
+        ...msgs,
+        {
+          role: "assistant",
+          content: "Audit failed. Please check your API key and try again.",
+        },
+      ]);
+    } finally {
+      if (traceTimerRef.current) {
+        clearInterval(traceTimerRef.current);
+        traceTimerRef.current = null;
+      }
+      setTraceIndex(traceSteps.length);
       setIsRunning(false);
       setLastRunLabel(
         `Last audited at ${new Date().toLocaleTimeString([], {
@@ -148,115 +155,37 @@ export default function App() {
           minute: "2-digit",
         })}`,
       );
-    };
-
-    void finish();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeCase, isRunning, request, traceIndex]);
+    }
+  };
 
   const selectedFinding =
-    report.findings.find((finding) => finding.id === selectedFindingId) ??
-    report.findings[0] ??
+    report?.findings.find((f) => f.id === selectedFindingId) ??
+    report?.findings[0] ??
     null;
-
-  const runAudit = () => {
-    // Start LLM call immediately; animation plays in parallel
-    pendingReportRef.current = auditWithLLM(request).catch(() =>
-      auditRequest(request, activeCase),
-    );
-    setIsRunning(true);
-    setTraceIndex(0);
-    setCopyStatus("");
-  };
-
-  const resetToDefaults = () => {
-    const nextRequest = cloneRequest(activeCase.default_inputs);
-    const nextReport = auditRequest(nextRequest, activeCase);
-    setRequest(nextRequest);
-    setReport(nextReport);
-    setSelectedFindingId(nextReport.findings[0]?.id ?? null);
-    setChatMessages([buildIntroMessage(activeCase, nextReport)]);
-    setLastRunLabel("Reset to demo defaults");
-    setCopyStatus("");
-  };
-
-  const handleDatasetUpload = async (file: File | undefined) => {
-    if (!file) {
-      return;
-    }
-
-    const text = await file.text();
-    const headers = parseCsvHeader(text);
-
-    setRequest((current) => {
-      const existingByName = new Map(
-        current.feature_dictionary.map((feature) => [feature.name.toLowerCase(), feature]),
-      );
-
-      const mergedFeatures =
-        headers.length > 0
-          ? headers.map((header) => {
-              const existing = existingByName.get(header.toLowerCase());
-              return (
-                existing ?? {
-                  name: header,
-                  description: "Uploaded column from the dataset header.",
-                  availability: "unknown" as const,
-                }
-              );
-            })
-          : current.feature_dictionary;
-
-      return {
-        ...current,
-        dataset_ref: file.name,
-        optional_uploads: unique([...(current.optional_uploads ?? []), file.name]),
-        feature_dictionary: mergedFeatures,
-      };
-    });
-
-    setLastRunLabel(`Loaded dataset header from ${file.name}`);
-  };
-
-  const handleArtifactUpload = (files: FileList | null) => {
-    if (!files) {
-      return;
-    }
-
-    const fileNames = Array.from(files).map((file) => file.name);
-    setRequest((current) => ({
-      ...current,
-      optional_uploads: unique([...(current.optional_uploads ?? []), ...fileNames]),
-      model_artifacts_optional: [
-        current.model_artifacts_optional ?? "Supplementary artifacts:",
-        ...fileNames,
-      ].join("\n"),
-    }));
-    setLastRunLabel(`Attached ${fileNames.length} supporting artifact(s)`);
-  };
 
   const handleChatSubmit = (event: FormEvent) => {
     event.preventDefault();
     const trimmed = chatInput.trim();
-    if (!trimmed || isChatLoading) {
-      return;
-    }
+    if (!trimmed || isChatLoading || !report) return;
 
-    setChatMessages((currentMessages) => [
-      ...currentMessages,
-      { role: "user", content: trimmed },
-    ]);
+    setChatMessages((msgs) => [...msgs, { role: "user", content: trimmed }]);
     setChatInput("");
     setIsChatLoading(true);
 
     chatWithLLM(trimmed, report, request, chatMessages)
-      .catch(() => answerQuestion(trimmed, report, activeCase))
       .then((response) => {
-        setChatMessages((currentMessages) => [
-          ...currentMessages,
+        setChatMessages((msgs) => [
+          ...msgs,
           { role: "assistant", content: response },
+        ]);
+      })
+      .catch(() => {
+        setChatMessages((msgs) => [
+          ...msgs,
+          {
+            role: "assistant",
+            content: "Sorry, I could not process that question. Please try again.",
+          },
         ]);
       })
       .finally(() => {
@@ -265,20 +194,25 @@ export default function App() {
   };
 
   const handlePromptStarter = (prompt: string) => {
-    if (isChatLoading) return;
+    if (isChatLoading || !report) return;
 
-    setChatMessages((currentMessages) => [
-      ...currentMessages,
-      { role: "user", content: prompt },
-    ]);
+    setChatMessages((msgs) => [...msgs, { role: "user", content: prompt }]);
     setIsChatLoading(true);
 
     chatWithLLM(prompt, report, request, chatMessages)
-      .catch(() => answerQuestion(prompt, report, activeCase))
       .then((response) => {
-        setChatMessages((currentMessages) => [
-          ...currentMessages,
+        setChatMessages((msgs) => [
+          ...msgs,
           { role: "assistant", content: response },
+        ]);
+      })
+      .catch(() => {
+        setChatMessages((msgs) => [
+          ...msgs,
+          {
+            role: "assistant",
+            content: "Sorry, I could not process that question. Please try again.",
+          },
         ]);
       })
       .finally(() => {
@@ -287,7 +221,8 @@ export default function App() {
   };
 
   const downloadReport = () => {
-    const fileName = `${activeCase.case_id}-audit-report.json`;
+    if (!report) return;
+    const fileName = `${activeCaseId}-audit-report.json`;
     const blob = new Blob([JSON.stringify({ request, report }, null, 2)], {
       type: "application/json",
     });
@@ -300,12 +235,14 @@ export default function App() {
   };
 
   const copyFixPlan = async () => {
-    const content = report.fix_plan.map((item, index) => `${index + 1}. ${item}`).join("\n");
+    if (!report) return;
+    const content = report.fix_plan
+      .map((item, index) => `${index + 1}. ${item}`)
+      .join("\n");
     if (!navigator.clipboard) {
       setCopyStatus("Clipboard not available in this browser.");
       return;
     }
-
     await navigator.clipboard.writeText(content);
     setCopyStatus("Fix plan copied.");
   };
@@ -327,19 +264,23 @@ export default function App() {
           <div className="hero-copy">
             <p className="eyebrow">Leakage Audit Agent</p>
             <h2>
-              Cross-domain model integrity review for researchers, students, and teams
-              shipping predictive workflows.
+              Cross-domain model integrity review for researchers, students, and
+              teams shipping predictive workflows.
             </h2>
             <p className="hero-text">
-              LeakGuard is not another prediction model. It audits whether your dataset,
-              features, and validation setup are methodologically trustworthy before you
-              trust the metric.
+              LeakGuard is not another prediction model. It audits whether your
+              dataset, features, and validation setup are methodologically
+              trustworthy before you trust the metric.
             </p>
             <div className="hero-actions">
               <a className="primary-button" href="#workspace">
-                Launch Hybrid Audit Demo
+                Launch Audit Demo
               </a>
-              <button className="ghost-button" type="button" onClick={resetToDefaults}>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={resetToDefaults}
+              >
                 Reset Current Case
               </button>
             </div>
@@ -355,8 +296,11 @@ export default function App() {
               </ul>
             </div>
             <div className="hero-card">
-              <span className="hero-kicker">Cross-domain proof</span>
-              <p>Housing, healthcare, and finance cases all route through the same audit engine.</p>
+              <span className="hero-kicker">Orchestrator + Tools</span>
+              <p>
+                Rules engine and LLM detectors work in parallel, each handling
+                what they do best.
+              </p>
             </div>
           </div>
         </section>
@@ -364,27 +308,44 @@ export default function App() {
         <section className="domain-strip">
           <article className="domain-card">
             <h3>Housing</h3>
-            <p>Spot future rent aggregates, post-lease answers, and repeated-building split leakage.</p>
+            <p>
+              Spot future rent aggregates, post-lease answers, and
+              repeated-building split leakage.
+            </p>
           </article>
           <article className="domain-card">
             <h3>Healthcare</h3>
-            <p>Audit whether an early-warning score is relying on operational response signals instead of true pre-event evidence.</p>
+            <p>
+              Audit whether an early-warning score is relying on operational
+              response signals instead of true pre-event evidence.
+            </p>
           </article>
           <article className="domain-card">
             <h3>Finance</h3>
-            <p>Separate real underwriting signals from post-origination collections and repayment behavior.</p>
+            <p>
+              Separate real underwriting signals from post-origination
+              collections and repayment behavior.
+            </p>
           </article>
         </section>
 
         <section className="workspace-section" id="workspace">
           <div className="section-header">
             <div>
-              <p className="eyebrow">Hybrid Workspace</p>
-              <h2>Run the audit, inspect the evidence, then ask the agent to explain it.</h2>
+              <p className="eyebrow">Agent Workspace</p>
+              <h2>
+                Run the audit, inspect the evidence, then ask the agent to
+                explain it.
+              </h2>
             </div>
             <div className="run-panel">
               <span className="run-status">{lastRunLabel}</span>
-              <button className="primary-button" type="button" onClick={runAudit} disabled={isRunning}>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => void runAudit()}
+                disabled={isRunning}
+              >
                 {isRunning ? "Auditing..." : "Run Audit"}
               </button>
             </div>
@@ -396,7 +357,7 @@ export default function App() {
                 key={demoCase.case_id}
                 className={`case-card ${demoCase.case_id === activeCase.case_id ? "is-active" : ""}`}
                 type="button"
-                onClick={() => setActiveCaseId(demoCase.case_id)}
+                onClick={() => switchCase(demoCase)}
               >
                 <span className="case-domain">{demoCase.domain}</span>
                 <strong>{demoCase.title}</strong>
@@ -415,7 +376,11 @@ export default function App() {
               <div className="source-note">
                 <p>{activeCase.source_note}</p>
                 {activeCase.source_url ? (
-                  <a href={activeCase.source_url} target="_blank" rel="noreferrer">
+                  <a
+                    href={activeCase.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     {activeCase.source_label}
                   </a>
                 ) : null}
@@ -424,45 +389,20 @@ export default function App() {
           </div>
 
           <div className="workspace-grid">
+            {/* ===== Intake Panel ===== */}
             <section className="panel intake-panel">
               <div className="panel-header">
                 <div>
                   <p className="eyebrow">Structured Intake</p>
-                  <h3>Dataset + metadata first</h3>
+                  <h3>Pipeline metadata</h3>
                 </div>
-                <button className="tiny-button" type="button" onClick={resetToDefaults}>
+                <button
+                  className="tiny-button"
+                  type="button"
+                  onClick={resetToDefaults}
+                >
                   Use demo defaults
                 </button>
-              </div>
-
-              <label className="field">
-                <span>Dataset reference</span>
-                <input
-                  type="text"
-                  value={request.dataset_ref}
-                  onChange={(event) =>
-                    setRequest((current) => ({ ...current, dataset_ref: event.target.value }))
-                  }
-                />
-              </label>
-
-              <div className="upload-row">
-                <label className="upload-card">
-                  <span>Upload dataset</span>
-                  <input
-                    type="file"
-                    accept=".csv,text/csv"
-                    onChange={(event) => void handleDatasetUpload(event.target.files?.[0])}
-                  />
-                </label>
-                <label className="upload-card">
-                  <span>Upload optional artifacts</span>
-                  <input
-                    type="file"
-                    multiple
-                    onChange={(event) => handleArtifactUpload(event.target.files)}
-                  />
-                </label>
               </div>
 
               <label className="field">
@@ -470,10 +410,10 @@ export default function App() {
                 <textarea
                   rows={3}
                   value={request.prediction_goal}
-                  onChange={(event) =>
-                    setRequest((current) => ({
-                      ...current,
-                      prediction_goal: event.target.value,
+                  onChange={(e) =>
+                    setRequest((c) => ({
+                      ...c,
+                      prediction_goal: e.target.value,
                     }))
                   }
                 />
@@ -485,17 +425,27 @@ export default function App() {
                   <input
                     type="text"
                     value={request.target_column}
-                    onChange={(event) =>
-                      setRequest((current) => ({
-                        ...current,
-                        target_column: event.target.value,
+                    onChange={(e) =>
+                      setRequest((c) => ({
+                        ...c,
+                        target_column: e.target.value,
                       }))
                     }
                   />
                 </label>
                 <label className="field">
-                  <span>Domain</span>
-                  <input type="text" value={request.domain_template} readOnly />
+                  <span>Prediction time point</span>
+                  <input
+                    type="text"
+                    value={request.prediction_time_point}
+                    onChange={(e) =>
+                      setRequest((c) => ({
+                        ...c,
+                        prediction_time_point: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g. The moment a listing goes live"
+                  />
                 </label>
               </div>
 
@@ -505,10 +455,10 @@ export default function App() {
                   <input
                     type="text"
                     value={joinValues(request.timestamp_fields)}
-                    onChange={(event) =>
-                      setRequest((current) => ({
-                        ...current,
-                        timestamp_fields: splitValues(event.target.value),
+                    onChange={(e) =>
+                      setRequest((c) => ({
+                        ...c,
+                        timestamp_fields: splitValues(e.target.value),
                       }))
                     }
                   />
@@ -518,104 +468,196 @@ export default function App() {
                   <input
                     type="text"
                     value={joinValues(request.entity_keys)}
-                    onChange={(event) =>
-                      setRequest((current) => ({
-                        ...current,
-                        entity_keys: splitValues(event.target.value),
+                    onChange={(e) =>
+                      setRequest((c) => ({
+                        ...c,
+                        entity_keys: splitValues(e.target.value),
                       }))
                     }
                   />
                 </label>
               </div>
 
-              <label className="field">
-                <span>Pipeline notes</span>
-                <textarea
-                  rows={5}
-                  value={request.pipeline_notes}
-                  onChange={(event) =>
-                    setRequest((current) => ({
-                      ...current,
-                      pipeline_notes: event.target.value,
-                    }))
-                  }
-                />
-              </label>
+              <div className="tab-switcher">
+                <button
+                  className={`tab-button ${pipelineTab === "notes" ? "tab-active" : ""}`}
+                  type="button"
+                  onClick={() => setPipelineTab("notes")}
+                >
+                  Pipeline Notes
+                </button>
+                <button
+                  className={`tab-button ${pipelineTab === "code" ? "tab-active" : ""}`}
+                  type="button"
+                  onClick={() => setPipelineTab("code")}
+                >
+                  Preprocessing Code
+                </button>
+              </div>
 
-              <label className="field">
-                <span>Model artifacts / notes</span>
-                <textarea
-                  rows={4}
-                  value={request.model_artifacts_optional ?? ""}
-                  onChange={(event) =>
-                    setRequest((current) => ({
-                      ...current,
-                      model_artifacts_optional: event.target.value,
-                    }))
-                  }
-                />
-              </label>
+              {pipelineTab === "notes" ? (
+                <label className="field">
+                  <span>Pipeline notes</span>
+                  <textarea
+                    rows={5}
+                    value={request.pipeline_notes}
+                    onChange={(e) =>
+                      setRequest((c) => ({
+                        ...c,
+                        pipeline_notes: e.target.value,
+                      }))
+                    }
+                    placeholder="Describe how the data is split, preprocessed, and fed to the model."
+                  />
+                </label>
+              ) : (
+                <label className="field">
+                  <span>Preprocessing code (Python)</span>
+                  <textarea
+                    rows={8}
+                    value={request.preprocessing_code ?? ""}
+                    onChange={(e) =>
+                      setRequest((c) => ({
+                        ...c,
+                        preprocessing_code: e.target.value || undefined,
+                      }))
+                    }
+                    placeholder="Paste your preprocessing / pipeline code here for code-level audit."
+                    style={{ fontFamily: "monospace", fontSize: "0.85rem" }}
+                  />
+                </label>
+              )}
 
               <div className="feature-catalog">
                 <div className="panel-header compact">
                   <div>
                     <p className="eyebrow">Feature Catalog</p>
-                    <h4>{request.feature_dictionary.length} tracked fields</h4>
+                    <h4>
+                      {request.feature_dictionary.length} tracked fields
+                    </h4>
                   </div>
                 </div>
                 <div className="feature-list">
-                  {request.feature_dictionary.map((feature) => (
+                  {request.feature_dictionary.map((feature, idx) => (
                     <article className="feature-row" key={feature.name}>
-                      <div>
-                        <strong>{feature.name}</strong>
-                        <p>{feature.description}</p>
+                      <div style={{ flex: 1 }}>
+                        <input
+                          type="text"
+                          value={feature.name}
+                          onChange={(e) => {
+                            const updated = [...request.feature_dictionary];
+                            updated[idx] = { ...updated[idx], name: e.target.value };
+                            setRequest((c) => ({
+                              ...c,
+                              feature_dictionary: updated,
+                            }));
+                          }}
+                          style={{
+                            fontWeight: 700,
+                            border: "none",
+                            background: "transparent",
+                            padding: "2px 0",
+                            width: "100%",
+                          }}
+                        />
+                        <textarea
+                          rows={2}
+                          value={feature.description}
+                          onChange={(e) => {
+                            const updated = [...request.feature_dictionary];
+                            updated[idx] = {
+                              ...updated[idx],
+                              description: e.target.value,
+                            };
+                            setRequest((c) => ({
+                              ...c,
+                              feature_dictionary: updated,
+                            }));
+                          }}
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            padding: "2px 0",
+                            width: "100%",
+                            resize: "vertical",
+                            color: "var(--muted)",
+                            fontSize: "0.9rem",
+                          }}
+                        />
                       </div>
-                      <div className="feature-tags">
-                        <span className="availability-chip">
-                          {feature.availability ?? "unknown"}
-                        </span>
-                        {(feature.semantic_tags ?? []).map((tag) => (
-                          <span className="tag-chip" key={`${feature.name}-${tag}`}>
-                            {tag.replace(/_/g, " ")}
-                          </span>
-                        ))}
-                      </div>
+                      <button
+                        className="tiny-button"
+                        type="button"
+                        onClick={() => {
+                          setRequest((c) => ({
+                            ...c,
+                            feature_dictionary:
+                              c.feature_dictionary.filter((_, i) => i !== idx),
+                          }));
+                        }}
+                        style={{ alignSelf: "flex-start", padding: "6px 10px" }}
+                      >
+                        Remove
+                      </button>
                     </article>
                   ))}
+                  <button
+                    className="tiny-button"
+                    type="button"
+                    onClick={() => {
+                      setRequest((c) => ({
+                        ...c,
+                        feature_dictionary: [
+                          ...c.feature_dictionary,
+                          { name: "", description: "" },
+                        ],
+                      }));
+                    }}
+                    style={{ alignSelf: "flex-start" }}
+                  >
+                    + Add Feature
+                  </button>
                 </div>
               </div>
             </section>
 
+            {/* ===== Trace Panel ===== */}
             <section className="panel trace-panel">
               <div className="panel-header">
                 <div>
                   <p className="eyebrow">Audit Console</p>
                   <h3>Agent trace</h3>
                 </div>
-                <span className="status-pill">{isRunning ? "Running" : "Ready"}</span>
+                <span className="status-pill">
+                  {isRunning ? "Running" : "Ready"}
+                </span>
               </div>
 
               <div className="trace-list">
                 {traceSteps.map((step, index) => {
-                  const state = isRunning
-                    ? index < traceIndex
-                      ? "done"
-                      : index === traceIndex
-                        ? "active"
-                        : "pending"
-                    : "done";
+                  let state: string;
+                  if (!isRunning && traceIndex < 0) {
+                    state = "pending";
+                  } else if (isRunning) {
+                    state =
+                      index < traceIndex
+                        ? "done"
+                        : index === traceIndex
+                          ? "active"
+                          : "pending";
+                  } else {
+                    state = "done";
+                  }
 
                   return (
-                    <article className={`trace-step trace-${state}`} key={step.title}>
+                    <article
+                      className={`trace-step trace-${state}`}
+                      key={step.title}
+                    >
                       <div className="trace-marker">{index + 1}</div>
                       <div>
                         <h4>{step.title}</h4>
                         <p>{step.detail}</p>
-                        {state === "done" && report.findings[index] ? (
-                          <small>
-                            Highlight: {report.findings[index].title}
-                          </small>
-                        ) : null}
                       </div>
                     </article>
                   );
@@ -632,117 +674,179 @@ export default function App() {
               </div>
             </section>
 
+            {/* ===== Results Panel ===== */}
             <section className="panel results-panel">
               <div className="panel-header">
                 <div>
                   <p className="eyebrow">Findings</p>
                   <h3>Evidence-backed report</h3>
                 </div>
-                <div className="results-actions">
-                  <button className="tiny-button" type="button" onClick={downloadReport}>
-                    Export JSON
-                  </button>
-                  <button className="tiny-button" type="button" onClick={() => void copyFixPlan()}>
-                    Copy fix plan
-                  </button>
-                </div>
+                {report && (
+                  <div className="results-actions">
+                    <button
+                      className="tiny-button"
+                      type="button"
+                      onClick={downloadReport}
+                    >
+                      Export JSON
+                    </button>
+                    <button
+                      className="tiny-button"
+                      type="button"
+                      onClick={() => void copyFixPlan()}
+                    >
+                      Copy fix plan
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <article className="risk-card">
-                <div>
-                  <p className="eyebrow">Overall risk</p>
-                  <div className="risk-summary">
-                    <span className={riskLabelClass(report.overall_risk)}>
-                      {report.overall_risk.toUpperCase()}
-                    </span>
-                    <p>{report.summary}</p>
-                  </div>
+              {!report ? (
+                <div className="empty-state">
+                  <p className="eyebrow">No audit yet</p>
+                  <p>
+                    Fill in the intake form and click "Run Audit" to get
+                    started.
+                  </p>
                 </div>
-                <div className="bucket-grid">
-                  {Object.entries(report.bucket_summary).map(([bucket, count]) => (
-                    <div className="bucket-card" key={bucket}>
-                      <strong>{count}</strong>
-                      <span>{bucket}</span>
-                    </div>
-                  ))}
-                </div>
-                {copyStatus ? <p className="copy-status">{copyStatus}</p> : null}
-              </article>
-
-              <div className="findings-list">
-                {report.findings.map((finding) => (
-                  <button
-                    key={finding.id}
-                    className={findingClassName(finding, selectedFindingId)}
-                    type="button"
-                    onClick={() => setSelectedFindingId(finding.id)}
-                  >
-                    <div className="finding-head">
-                      <strong>{finding.flagged_object}</strong>
-                      <span className={riskLabelClass(finding.severity)}>{finding.severity}</span>
-                    </div>
-                    <p>{finding.title}</p>
-                    <div className="finding-meta">
-                      <span>{finding.macro_bucket}</span>
-                      <span>{finding.fine_grained_type}</span>
-                      <span>{finding.confidence} confidence</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              {selectedFinding ? (
-                <article className="detail-card">
-                  <div className="panel-header compact">
+              ) : (
+                <>
+                  <article className="risk-card">
                     <div>
-                      <p className="eyebrow">Detail view</p>
-                      <h4>{selectedFinding.flagged_object}</h4>
+                      <p className="eyebrow">Overall risk</p>
+                      <div className="risk-summary">
+                        <span className={riskLabelClass(report.overall_risk)}>
+                          {report.overall_risk.toUpperCase()}
+                        </span>
+                        <p>{report.summary}</p>
+                      </div>
                     </div>
-                    <span className={riskLabelClass(selectedFinding.severity)}>
-                      {selectedFinding.macro_bucket}
-                    </span>
-                  </div>
-                  <p className="detail-subtitle">{selectedFinding.title}</p>
-                  <div className="detail-columns">
-                    <div>
-                      <h5>Evidence</h5>
-                      <ul>
-                        {selectedFinding.evidence.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
+                    <div className="bucket-grid">
+                      {Object.entries(report.bucket_summary).map(
+                        ([bucket, count]) => (
+                          <div className="bucket-card" key={bucket}>
+                            <strong>{count}</strong>
+                            <span>{bucket}</span>
+                          </div>
+                        ),
+                      )}
                     </div>
-                    <div>
-                      <h5>Recommendation</h5>
-                      <ul>
-                        {selectedFinding.fix_recommendation.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                  <div className="detail-footer">
-                    <p>{selectedFinding.why_it_matters}</p>
-                    {selectedFinding.needs_human_review ? (
-                      <span className="human-review-chip">Needs human review</span>
+                    {copyStatus ? (
+                      <p className="copy-status">{copyStatus}</p>
                     ) : null}
-                  </div>
-                </article>
-              ) : null}
+                  </article>
 
-              {report.missing_metadata.length > 0 ? (
-                <article className="metadata-card">
-                  <p className="eyebrow">Missing metadata</p>
-                  <ul>
-                    {report.clarifying_questions.map((question) => (
-                      <li key={question}>{question}</li>
+                  {report.narrative_report && (
+                    <article className="narrative-card">
+                      <p className="eyebrow">Narrative Report</p>
+                      <p className="narrative-text">
+                        {report.narrative_report}
+                      </p>
+                    </article>
+                  )}
+
+                  {report.safe_features && report.safe_features.length > 0 && (
+                    <article className="safe-features-card">
+                      <p className="eyebrow">Safe Features</p>
+                      <div className="safe-features-list">
+                        {report.safe_features.map((name) => (
+                          <span className="safe-chip" key={name}>
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    </article>
+                  )}
+
+                  <div className="findings-list">
+                    {report.findings.map((finding) => (
+                      <button
+                        key={finding.id}
+                        className={findingClassName(finding, selectedFindingId)}
+                        type="button"
+                        onClick={() => setSelectedFindingId(finding.id)}
+                      >
+                        <div className="finding-head">
+                          <strong>{finding.flagged_object}</strong>
+                          <span
+                            className={riskLabelClass(finding.severity)}
+                          >
+                            {finding.severity}
+                          </span>
+                        </div>
+                        <p>{finding.title}</p>
+                        <div className="finding-meta">
+                          <span>{finding.macro_bucket}</span>
+                          <span>{finding.fine_grained_type}</span>
+                          <span>{finding.confidence} confidence</span>
+                        </div>
+                      </button>
                     ))}
-                  </ul>
-                </article>
-              ) : null}
+                  </div>
+
+                  {selectedFinding ? (
+                    <article className="detail-card">
+                      <div className="panel-header compact">
+                        <div>
+                          <p className="eyebrow">Detail view</p>
+                          <h4>{selectedFinding.flagged_object}</h4>
+                        </div>
+                        <span
+                          className={riskLabelClass(selectedFinding.severity)}
+                        >
+                          {selectedFinding.macro_bucket}
+                        </span>
+                      </div>
+                      <p className="detail-subtitle">
+                        {selectedFinding.title}
+                      </p>
+                      <div className="detail-columns">
+                        <div>
+                          <h5>Evidence</h5>
+                          <ul>
+                            {selectedFinding.evidence.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <h5>Recommendation</h5>
+                          <ul>
+                            {selectedFinding.fix_recommendation.map(
+                              (item) => (
+                                <li key={item}>{item}</li>
+                              ),
+                            )}
+                          </ul>
+                        </div>
+                      </div>
+                      <div className="detail-footer">
+                        <p>{selectedFinding.why_it_matters}</p>
+                        {selectedFinding.needs_human_review ? (
+                          <span className="human-review-chip">
+                            Needs human review
+                          </span>
+                        ) : null}
+                      </div>
+                    </article>
+                  ) : null}
+
+                  {report.missing_metadata.length > 0 ? (
+                    <article className="metadata-card">
+                      <p className="eyebrow">Missing metadata</p>
+                      <ul>
+                        {report.clarifying_questions.map((question) => (
+                          <li key={question}>{question}</li>
+                        ))}
+                      </ul>
+                    </article>
+                  ) : null}
+                </>
+              )}
             </section>
           </div>
 
+          {/* ===== Chat Panel ===== */}
           <section className="panel chat-panel">
             <div className="panel-header">
               <div>
@@ -758,6 +862,7 @@ export default function App() {
                   key={prompt}
                   type="button"
                   onClick={() => handlePromptStarter(prompt)}
+                  disabled={!report}
                 >
                   {prompt}
                 </button>
@@ -770,14 +875,16 @@ export default function App() {
                   className={`chat-bubble chat-${message.role}`}
                   key={`${message.role}-${index}`}
                 >
-                  <span>{message.role === "assistant" ? "LeakGuard" : "You"}</span>
+                  <span>
+                    {message.role === "assistant" ? "LeakGuard" : "You"}
+                  </span>
                   <p>{message.content}</p>
                 </article>
               ))}
               {isChatLoading && (
                 <article className="chat-bubble chat-assistant">
                   <span>LeakGuard</span>
-                  <p className="thinking-indicator">Thinking…</p>
+                  <p className="thinking-indicator">Thinking...</p>
                 </article>
               )}
             </div>
@@ -786,12 +893,20 @@ export default function App() {
               <input
                 type="text"
                 value={chatInput}
-                onChange={(event) => setChatInput(event.target.value)}
-                placeholder="Ask why a finding is leaky, what to fix, or what metadata is missing."
-                disabled={isChatLoading}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder={
+                  report
+                    ? "Ask why a finding is leaky, what to fix, or what metadata is missing."
+                    : "Run an audit first to enable chat."
+                }
+                disabled={isChatLoading || !report}
               />
-              <button className="primary-button" type="submit" disabled={isChatLoading}>
-                {isChatLoading ? "…" : "Ask"}
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={isChatLoading || !report}
+              >
+                {isChatLoading ? "..." : "Ask"}
               </button>
             </form>
           </section>

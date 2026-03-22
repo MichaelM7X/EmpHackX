@@ -848,6 +848,93 @@ button {
   }
 }
 
+.tab-switcher {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.tab-button {
+  flex: 1;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.tab-button.tab-active {
+  background: rgba(210, 92, 40, 0.1);
+  color: var(--accent);
+}
+
+.tab-button:hover:not(.tab-active) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.narrative-card {
+  padding: 18px;
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(31, 122, 113, 0.04);
+}
+
+.narrative-text {
+  margin: 10px 0 0;
+  line-height: 1.75;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+.safe-features-card {
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  border: 1px solid rgba(77, 143, 115, 0.2);
+  border-radius: 24px;
+  background: rgba(77, 143, 115, 0.06);
+}
+
+.safe-features-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.safe-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(77, 143, 115, 0.14);
+  color: var(--low);
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.empty-state p {
+  margin: 4px 0;
+}
+
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }

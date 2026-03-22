@@ -1,6 +1,8 @@
 import type { AuditReport, AuditRequest } from "../types";
 
-export async function auditWithLLM(request: AuditRequest): Promise<AuditReport> {
+export async function auditWithLLM(
+  request: AuditRequest,
+): Promise<AuditReport> {
   const response = await fetch("/api/audit", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
