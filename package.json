@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "node --import tsx server/index.ts",
+    "server": "node --env-file=.env --import tsx server/index.ts",
     "server:watch": "tsx watch server/index.ts",
     "dev:full": "concurrently \"npm run dev\" \"npm run server:watch\"",
     "build": "tsc && vite build",
