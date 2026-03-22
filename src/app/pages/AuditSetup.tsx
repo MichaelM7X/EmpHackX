@@ -83,7 +83,7 @@ export function AuditSetup() {
         setZipStatus(null);
       } else {
         setZipStatus('Classifying code files with LLM…');
-        const resp = await fetch('http://localhost:3001/api/classify-code', {
+        const resp = await fetch('/api/classify-code', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ files: pyContents }),
@@ -148,17 +148,28 @@ export function AuditSetup() {
     preprocessingCode.trim() !== '' &&
     !isSubmitting;
 
+  // Keyboard quick-fill: matches `test dataset/*/Prediction task description.txt` + `Target column name.txt`
+  // (health-clean vs health-leaky share the same txts; legal-clean/leaky and finance-clean/leaky each share the same txts.)
+  const HEALTH_TASK =
+    'Predict whether a hospitalized adult will meet criteria for sepsis or septic shock within the first 24 hours of an emergency department encounter, using only information that would be available at the time clinicians must decide on early escalation (triage through early ED course).';
+  const LEGAL_TASK = 'Predict whether a defendant will be found guilty in a criminal case.';
+  const FINANCE_TASK =
+    'Predict whether a loan applicant will default on their loan based on financial profile and credit history.';
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
       if (e.key === '1') {
-        setTaskDescription('Predict whether a hospitalized adult will meet criteria for sepsis or septic shock within the first 24 hours of an emergency department encounter, using only information that would be available at the time clinicians must decide on early escalation (triage through early ED course).');
+        setTaskDescription(HEALTH_TASK);
         setTargetColumn('sepsis_within_24h');
       } else if (e.key === '2') {
-        setTaskDescription('Predict whether a hospitalized adult will meet criteria for sepsis or septic shock within the first 24 hours of an emergency department encounter, using only information that would be available at the time clinicians must decide on early escalation (triage through early ED course).');
-        setTargetColumn('sepsis_within_24h');
+        setTaskDescription(LEGAL_TASK);
+        setTargetColumn('found_guilty');
+      } else if (e.key === '3') {
+        setTaskDescription(FINANCE_TASK);
+        setTargetColumn('loan_defaulted');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
