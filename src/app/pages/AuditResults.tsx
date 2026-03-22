@@ -1,4 +1,5 @@
 import { motion } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
 import { Link, useLocation, useNavigate } from 'react-router';
 import {
   ArrowRight,
@@ -499,38 +500,60 @@ export function AuditResults() {
 
           <div className="bg-white/65 backdrop-blur-sm rounded-xl border border-[var(--border)]/60">
             <div className="px-8 py-8">
-              <div className="prose prose-sm max-w-none space-y-6">
-                {auditReportText.split('\n\n').map((paragraph, idx) => {
-                  const trimmed = paragraph.trim();
-                  if (trimmed.startsWith('**')) {
-                    const title = trimmed.replace(/^\*\*|\*\*$/g, '').replace(/\*\*/g, '');
-                    return (
-                      <h3
-                        key={idx}
-                        className="text-base font-medium text-[var(--foreground)] mt-8 mb-3 first:mt-0"
-                      >
-                        {title}
-                      </h3>
-                    );
-                  }
-                  return (
-                    <p key={idx} className="text-sm text-[var(--foreground)] leading-relaxed">
-                      {trimmed.split('`').map((part, i) =>
-                        i % 2 === 0 ? (
-                          part
-                        ) : (
-                          <code
-                            key={i}
-                            className="px-2 py-0.5 rounded bg-[var(--secondary)] text-[var(--accent-primary)] text-xs font-mono border border-[var(--border)]"
-                          >
-                            {part}
-                          </code>
-                        ),
-                      )}
+              <ReactMarkdown
+                components={{
+                  p: ({ children }) => (
+                    <p className="text-sm text-[var(--foreground)] leading-relaxed mb-4 last:mb-0">
+                      {children}
                     </p>
-                  );
-                })}
-              </div>
+                  ),
+                  h1: ({ children }) => (
+                    <h1 className="text-lg font-semibold text-[var(--foreground)] mt-6 mb-3 first:mt-0">{children}</h1>
+                  ),
+                  h2: ({ children }) => (
+                    <h2 className="text-base font-semibold text-[var(--foreground)] mt-6 mb-2 first:mt-0">{children}</h2>
+                  ),
+                  h3: ({ children }) => (
+                    <h3 className="text-sm font-semibold text-[var(--foreground)] mt-5 mb-2 first:mt-0">{children}</h3>
+                  ),
+                  strong: ({ children }) => (
+                    <strong className="font-semibold text-[var(--foreground)]">{children}</strong>
+                  ),
+                  ul: ({ children }) => (
+                    <ul className="list-disc list-outside pl-5 space-y-1 mb-4 text-sm text-[var(--foreground)]">{children}</ul>
+                  ),
+                  ol: ({ children }) => (
+                    <ol className="list-decimal list-outside pl-5 space-y-1.5 mb-4 text-sm text-[var(--foreground)]">{children}</ol>
+                  ),
+                  li: ({ children }) => (
+                    <li className="leading-relaxed">{children}</li>
+                  ),
+                  code: ({ children, className }) => {
+                    const isBlock = className?.includes('language-');
+                    if (isBlock) {
+                      return (
+                        <code className="block w-full rounded-lg bg-slate-50 border border-[var(--border)] px-4 py-3 text-xs font-mono text-slate-700 overflow-x-auto my-3">
+                          {children}
+                        </code>
+                      );
+                    }
+                    return (
+                      <code className="px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--accent-primary)] text-xs font-mono border border-[var(--border)]">
+                        {children}
+                      </code>
+                    );
+                  },
+                  pre: ({ children }) => <>{children}</>,
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-l-2 border-[var(--accent-primary)]/40 pl-4 italic text-[var(--muted-foreground)] my-3">
+                      {children}
+                    </blockquote>
+                  ),
+                  hr: () => <hr className="border-[var(--border)]/50 my-4" />,
+                }}
+              >
+                {auditReportText}
+              </ReactMarkdown>
             </div>
           </div>
         </motion.div>
@@ -934,6 +957,62 @@ function inlineCode(text: string): React.ReactNode[] {
     }
     return part;
   });
+}
+
+// Returns true when a double-quoted string's contents look like code or an identifier.
+function looksLikeCode(s: string): boolean {
+  // Strip trailing sentence punctuation that sometimes ends up inside the quotes
+  const clean = s.replace(/[.,;:!?]+$/, '').trim();
+  if (clean.length === 0) return false;
+  // Code expressions: contain brackets, operators, or dots (e.g. df['col'] = ...)
+  if (/[\[\]()=]/.test(clean)) return true;
+  // Identifier: has at least one underscore (snake_case, any case start)
+  if (/_/.test(clean)) return true;
+  // CamelCase / PascalCase identifier (≥ 2 words merged, e.g. SelectKBest, trainTestSplit)
+  if (/^[A-Za-z][a-z0-9]*(?:[A-Z][a-z0-9]*)+$/.test(clean)) return true;
+  return false;
+}
+
+// One-pass scanner: backtick spans → "double-quoted code/identifiers" → bare snake_case/camelCase.
+// This handles uppercase starts ("Days_on_market"), trailing punctuation inside quotes
+// ("leased_within_7_days."), and full code expressions ("df['col'] = df.groupby(...)").
+function renderReportInline(text: string): React.ReactNode[] {
+  const codeClass =
+    'px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--accent-primary)] text-xs font-mono border border-[var(--border)]';
+  // Order matters: backtick first, then double-quoted, then bare identifiers
+  const re = /`([^`]+)`|"([^"]+)"|(\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b|\b[a-z]+[A-Z][a-zA-Z0-9]+\b)/g;
+  const nodes: React.ReactNode[] = [];
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      nodes.push(text.slice(lastIdx, match.index));
+    }
+    if (match[1] !== undefined) {
+      // `backtick` span
+      nodes.push(<code key={match.index} className={codeClass}>{match[1]}</code>);
+    } else if (match[2] !== undefined) {
+      // "double-quoted" content — render as code only if it looks like an identifier/snippet
+      const inner = match[2];
+      const trailingPunct = inner.match(/[.,;:!?]+$/)?.[0] ?? '';
+      const clean = inner.slice(0, inner.length - trailingPunct.length).trim();
+      if (looksLikeCode(inner)) {
+        // Emit the code block, then restore any punctuation that was inside the quotes
+        nodes.push(<code key={match.index} className={codeClass}>{clean}</code>);
+        if (trailingPunct) nodes.push(trailingPunct);
+      } else {
+        nodes.push(`"${inner}"`);
+      }
+    } else if (match[3] !== undefined) {
+      // bare snake_case or camelCase identifier
+      nodes.push(<code key={match.index} className={codeClass}>{match[3]}</code>);
+    }
+    lastIdx = match.index + match[0].length;
+  }
+  if (lastIdx < text.length) {
+    nodes.push(text.slice(lastIdx));
+  }
+  return nodes;
 }
 
 function ActionItem({

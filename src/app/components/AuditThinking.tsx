@@ -122,7 +122,7 @@ function ThinkingOrb({ active }: { active: boolean }) {
         }
         transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
       />
-      <div className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/40 backdrop-blur-sm sm:h-12 sm:w-12">
+      <div className="relative z-10 flex items-center justify-center">
         <ClarionLogo size={28} animate={false} />
       </div>
     </div>
