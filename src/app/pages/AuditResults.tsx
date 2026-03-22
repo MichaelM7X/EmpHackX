@@ -560,12 +560,39 @@ export function AuditResults() {
 
           <div className="bg-white/65 backdrop-blur-sm rounded-xl border border-[var(--border)]/60">
             <div className="px-8 py-8">
-              <div className="space-y-3">
-                {executiveSummaryText.split('\n').filter((l) => l.trim()).map((line, i) => (
-                  <p key={i} className="text-sm text-[var(--foreground)] leading-relaxed">
-                    {line.trim()}
-                  </p>
-                ))}
+              <div className="flex flex-col" style={{ gap: 14 }}>
+                {executiveSummaryText.split('\n').filter((l) => l.trim()).map((line, i) => {
+                  const text = line.trim().replace(/^•\s*/, '');
+                  return (
+                    <div key={i} className="flex items-start" style={{ gap: 12 }}>
+                      <span
+                        className="flex-shrink-0 rounded-full"
+                        style={{
+                          width: 8,
+                          height: 8,
+                          marginTop: 7,
+                          background: getBulletColor(text),
+                        }}
+                      />
+                      <span className="text-sm text-[var(--foreground)] leading-relaxed">
+                        {renderExecLine(text)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="border-t mt-6 pt-4" style={{ borderColor: 'var(--border)', borderTopWidth: 0.5 }}>
+                {!reportExpanded && (
+                  <button
+                    type="button"
+                    onClick={() => setReportExpanded(true)}
+                    className="bg-none border-none cursor-pointer p-0"
+                    style={{ fontSize: 14, color: 'var(--muted-foreground)' }}
+                  >
+                    Expand full report ▾
+                  </button>
+                )}
               </div>
 
               {reportExpanded && (
@@ -573,27 +600,23 @@ export function AuditResults() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="mt-6 pt-6 border-t border-[var(--border)]/50"
+                  className="pt-4"
                 >
-                  <ReactMarkdown
-                    components={markdownComponents}
-                  >
+                  <ReactMarkdown components={markdownComponents}>
                     {auditReportText}
                   </ReactMarkdown>
+                  <div className="border-t mt-6 pt-4" style={{ borderColor: 'var(--border)', borderTopWidth: 0.5 }}>
+                    <button
+                      type="button"
+                      onClick={() => setReportExpanded(false)}
+                      className="bg-none border-none cursor-pointer p-0"
+                      style={{ fontSize: 14, color: 'var(--muted-foreground)' }}
+                    >
+                      Collapse ▴
+                    </button>
+                  </div>
                 </motion.div>
               )}
-
-              <button
-                type="button"
-                onClick={() => setReportExpanded(!reportExpanded)}
-                className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-[var(--accent-primary)] hover:text-[var(--accent-primary)]/80 transition-colors"
-              >
-                {reportExpanded ? (
-                  <>Collapse <ChevronUp className="w-4 h-4" /></>
-                ) : (
-                  <>Expand full report <ChevronDown className="w-4 h-4" /></>
-                )}
-              </button>
             </div>
           </div>
         </motion.div>
@@ -655,6 +678,83 @@ export function AuditResults() {
       />
     </div>
   );
+}
+
+const RISK_BADGES: Record<string, { bg: string; color: string }> = {
+  CRITICAL: { bg: '#FCEBEB', color: '#791F1F' },
+  HIGH: { bg: '#FAECE7', color: '#712B13' },
+  MEDIUM: { bg: '#FAEEDA', color: '#633806' },
+  LOW: { bg: '#EAF3DE', color: '#27500A' },
+};
+
+function getBulletColor(text: string): string {
+  const lower = text.toLowerCase();
+  if (/verdict|overall/i.test(lower)) return '#E24B4A';
+  if (/critical/i.test(lower)) return '#E24B4A';
+  if (/high|time\b|temporal/i.test(lower)) return '#D85A30';
+  if (/recommend|next\s*step/i.test(lower)) return '#1D9E75';
+  return '#888780';
+}
+
+function renderExecLine(text: string): React.ReactNode[] {
+  const riskRe = /\b(CRITICAL|HIGH|MEDIUM|LOW)\b/g;
+  const quoteRe = /'([^']+)'/g;
+
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  const combined = new RegExp(`${riskRe.source}|${quoteRe.source}`, 'g');
+  let m: RegExpExecArray | null;
+
+  while ((m = combined.exec(text)) !== null) {
+    if (m.index > cursor) {
+      nodes.push(text.slice(cursor, m.index));
+    }
+
+    if (m[1]) {
+      const level = m[1] as keyof typeof RISK_BADGES;
+      const badge = RISK_BADGES[level];
+      nodes.push(
+        <span
+          key={`b-${m.index}`}
+          style={{
+            background: badge.bg,
+            color: badge.color,
+            fontSize: 12,
+            fontWeight: 500,
+            padding: '2px 10px',
+            borderRadius: 99,
+            display: 'inline-flex',
+            alignItems: 'center',
+          }}
+        >
+          {level}
+        </span>,
+      );
+    } else if (m[2]) {
+      nodes.push(
+        <code
+          key={`c-${m.index}`}
+          style={{
+            fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+            fontSize: 13,
+            background: 'var(--secondary)',
+            padding: '1px 6px',
+            borderRadius: 4,
+          }}
+        >
+          {m[2]}
+        </code>,
+      );
+    }
+
+    cursor = m.index + m[0].length;
+  }
+
+  if (cursor < text.length) {
+    nodes.push(text.slice(cursor));
+  }
+
+  return nodes;
 }
 
 function RiskBadge({ severity, large = false }: { severity: Severity; large?: boolean }) {
