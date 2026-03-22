@@ -335,7 +335,11 @@ Review these findings and decide if any additional checks are needed.`;
     { role: "user", content: initialUserMessage },
   ];
 
+  console.log(`[Review Agent] Starting review of ${phase1Findings.length} Phase 1 findings...`);
+
   for (let round = 0; round < MAX_ROUNDS; round++) {
+    console.log(`[Review Agent] Round ${round + 1}/${MAX_ROUNDS}`);
+
     const response = await client.chat.completions.create({
       model: "gpt-4o",
       messages,
@@ -344,15 +348,20 @@ Review these findings and decide if any additional checks are needed.`;
     });
 
     const choice = response.choices[0];
-    if (!choice) break;
+    if (!choice) {
+      console.log("[Review Agent] No response choice, exiting.");
+      break;
+    }
 
     if (
       choice.finish_reason === "stop" ||
       !choice.message.tool_calls?.length
     ) {
+      console.log(`[Review Agent] Finished (reason: ${choice.finish_reason}, no tool calls). Additional findings: ${additionalFindings.length}`);
       break;
     }
 
+    console.log(`[Review Agent] Tool calls requested: ${choice.message.tool_calls.map((tc) => tc.function.name).join(", ")}`);
     messages.push(choice.message);
 
     for (const toolCall of choice.message.tool_calls) {
@@ -362,6 +371,7 @@ Review these findings and decide if any additional checks are needed.`;
 
       switch (toolCall.function.name) {
         case "cross_check_feature":
+          console.log(`[Review Agent]   → cross_check_feature("${args.feature_name}") reason: ${args.reason}`);
           newFindings = await executeCrossCheck(
             request,
             args.feature_name,
@@ -374,6 +384,7 @@ Review these findings and decide if any additional checks are needed.`;
           break;
 
         case "deep_dive_feature":
+          console.log(`[Review Agent]   → deep_dive_feature("${args.feature_name}")`);
           newFindings = await executeDeepDive(
             request,
             args.feature_name,
@@ -386,6 +397,7 @@ Review these findings and decide if any additional checks are needed.`;
           break;
 
         case "check_feature_interaction":
+          console.log(`[Review Agent]   → check_feature_interaction("${args.feature_a}" × "${args.feature_b}")`);
           newFindings = await executeInteractionCheck(
             request,
             args.feature_a,
@@ -399,12 +411,15 @@ Review these findings and decide if any additional checks are needed.`;
           break;
 
         case "finalize_review":
+          console.log(`[Review Agent]   → finalize_review: "${args.summary}"`);
+          console.log(`[Review Agent] Done. Additional findings: ${additionalFindings.length}`);
           return additionalFindings;
 
         default:
           toolResult = "Unknown tool called.";
       }
 
+      console.log(`[Review Agent]   Result: ${toolResult}`);
       additionalFindings.push(...newFindings);
 
       messages.push({
@@ -415,5 +430,6 @@ Review these findings and decide if any additional checks are needed.`;
     }
   }
 
+  console.log(`[Review Agent] Max rounds reached. Additional findings: ${additionalFindings.length}`);
   return additionalFindings;
 }
